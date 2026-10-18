@@ -11,6 +11,11 @@ FIELDS = {
     'medications': ('name', 'dose', 'schedule', 'context', 'date'),
     'family_history': ('relation', 'condition'),
     'lab_results': (),
+    'clinical_genetics': (),
+    'genetic_findings': (),
+    'documents': (),
+    'measurements': (),
+    'cycles': (),
 }
 REQUIRED = {'diagnoses': 'name', 'allergies': 'substance', 'events': 'title', 'medications': 'name', 'family_history': 'relation'}
 
@@ -48,19 +53,37 @@ def source_rows(table, rows):
         yield key_for(table, row, occurrence), row
 
 
+def vital_rows(data):
+    rows = [
+        {'metric': metric, 'taken_at': point['t'], **{k: v for k, v in point.items() if k != 't'}}
+        for metric, points in data['series'].items()
+        for point in points
+    ]
+    return {'measurements': rows, 'cycles': data['cycles']}
+
+
+def apply_table(table, rows, updates):
+    visible, deleted = [], []
+    for key, row in source_rows(table, rows):
+        row['_key'] = key
+        update = updates.get(key)
+        (deleted if update and update.get('deleted') else visible).append(row)
+    return visible, deleted
+
+
 def apply(data, updates):
     deleted = {table: [] for table in FIELDS}
     for table in FIELDS:
-        visible = []
-        for key, row in source_rows(table, data[table]):
-            row['_key'] = key
-            update = updates.get(key)
+        if table not in data:
+            continue
+        visible, deleted[table] = apply_table(table, data[table], updates)
+        for row in visible + deleted[table]:
+            key, update = row['_key'], updates.get(row['_key'])
             if update and (update['fields'] or update['notes']):
                 row['_original'] = {k: row.get(k) for k in FIELDS[table]}
                 row.update(update['fields'])
                 row['_patient_note'] = update['notes']
                 row['_patient_updated'] = bool(update['fields'])
-            (deleted[table] if update and update.get('deleted') else visible).append(row)
         for key, update in updates.items():
             if key.startswith(table + ':manual:'):
                 row = {**{k: None for k in data_columns(table)}, **update['fields'], '_key': key, '_manual': True, '_patient_note': update['notes']}
@@ -72,6 +95,12 @@ def apply(data, updates):
 
 def data_columns(table):
     import clinical
+    if table == 'measurements':
+        return ('metric', 'taken_at', 'value', 'source', 'doc', 'page', 'note', 'seq')
+    if table == 'cycles':
+        return ('start', 'end', 'source', 'doc', 'page', 'note')
+    if table == 'genetic_findings':
+        return ('category', 'gene', 'label', 'rsid', 'genotype', 'result', 'detected', 'classification', 'condition', 'review_stars', 'note', 'source_file')
     return clinical.TABLES[table]
 
 

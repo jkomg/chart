@@ -79,8 +79,9 @@ python3 app.py
 
 ## Appointment view
 
-The chart opens in **Provider** view, with editing and PDF uploads hidden. **Prepare**
-shows the goal editor and upload controls. This is a presentation switch within the
+The chart opens in **Provider** presentation view, with editing and PDF uploads hidden.
+A small **Exit presentation** button returns to **Prepare**, which shows the goal
+editor and upload controls. **Present to provider** starts the presentation at visit priorities. This is a presentation switch within the
 signed-in account, not a separate login or access restriction. The selected view is
 remembered per account for the current browser tab/session.
 
@@ -123,4 +124,6 @@ and asks for confirmation. Lab editors call this **Delete result**. Deleted entr
 stay recoverable under **Deleted entries** in Prepare, including their saved notes
 and patient updates. Grouped conditions and medications are deleted/restored with all
 the source rows represented by that item. Original source PDFs remain available.
-Deletions survive re-imports of unchanged source rows.
+Clinical genetics findings, medical record entries, vitals, and cycle entries can also
+be removed and restored. Unextracted PDF entries can be hidden while retaining the
+source file. Deletions survive re-imports of unchanged source rows.

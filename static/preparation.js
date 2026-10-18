@@ -10,9 +10,10 @@
     family_history: { relation: 'Relation', condition: 'Condition' },
     lab_results: {}
   };
-  const titles = { diagnoses: 'condition', allergies: 'allergy', events: 'event or procedure', medications: 'medication', family_history: 'family history', lab_results: 'lab note' };
+  const titles = { diagnoses: 'condition', allergies: 'allergy', events: 'event or procedure', medications: 'medication', family_history: 'family history', lab_results: 'lab note', clinical_genetics: 'genetic finding', genetic_findings: 'consumer genetic finding', documents: 'medical record' };
   let modalDirty = false;
   const dirtySections = new Set();
+  let deletedState = {};
   chart.hasUnsavedPreparation = () => modalDirty || dirtySections.size > 0;
   async function write(url, method, data) {
     const response = await fetch(url, { method, credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: data ? JSON.stringify(data) : undefined });
@@ -183,16 +184,25 @@
     container.append(edit);
     return container;
   };
+  const deleteRow = async (table, row, after = refreshRecords) => {
+    if (chart.mode !== 'owner' || !confirm('Remove this item from the report? You can restore it under Deleted entries in Prepare. Source files are kept.')) return;
+    try {
+      await write('/api/preparation/entries/' + table, 'PATCH', { keys: recordKeys(row), deleted: true });
+      await after();
+      chart.toast('Item removed from the report.');
+    } catch (failure) { chart.toast(failure.message); }
+  };
   window.addEventListener('beforeunload', event => { if (chart.hasUnsavedPreparation()) { event.preventDefault(); event.returnValue = ''; } });
   const renderDeleted = data => {
-    const sections = { diagnoses: 'history', allergies: 'history', events: 'history', medications: 'medications', family_history: 'family', lab_results: 'labs' };
+    deletedState = { ...deletedState, ...(data.deleted_entries || {}) };
+    const sections = { diagnoses: 'history', allergies: 'history', events: 'history', medications: 'medications', family_history: 'family', lab_results: 'labs', documents: 'documents', clinical_genetics: 'genetics', genetic_findings: 'genetics', measurements: 'vitals', cycles: 'vitals' };
     const panels = new Map();
     for (const id of new Set(Object.values(sections))) {
       const previous = document.querySelector(`#${id} .deleted-entries`);
       panels.set(id, { open: previous?.open || false, rows: [] });
       previous?.remove();
     }
-    for (const [table, rows] of Object.entries(data.deleted_entries || {})) {
+    for (const [table, rows] of Object.entries(deletedState)) {
       if (!sections[table]) continue;
       const entries = ['diagnoses', 'medications'].includes(table) ? chart.groupClinicalByName(rows) : rows;
       for (const row of entries) panels.get(sections[table]).rows.push({ table, row });
@@ -205,7 +215,7 @@
       for (const { table, row } of rows) {
         const restore = el('button', { type: 'button', class: 'outline-button compact' }, 'Restore entry');
         const error = el('p', { class: 'save-status', role: 'alert' });
-        const title = row.name || row.substance || row.title || row.test || [row.relation, row.condition].filter(Boolean).join(' · ');
+        const title = row.name || row.substance || row.title || row.test || row.label || (row.metric ? `${row.metric} · ${row.taken_at}` : '') || (row.start ? `Menstrual cycle · ${row.start}` : '') || row.document || [row.relation, row.condition].filter(Boolean).join(' · ');
         const dates = [row.date || row.taken_at, row._manual ? 'Patient-entered' : 'Source record', recordKeys(row).length > 1 ? `${recordKeys(row).length} records` : null].filter(Boolean).join(' · ');
         const entry = el('article', { class: 'deleted-entry' }, el('div', {}, el('b', {}, title), el('p', { class: 'vital-meta' }, dates)), restore, error);
         restore.addEventListener('click', async () => {
@@ -213,7 +223,9 @@
           restore.disabled = true;
           try {
             await write('/api/preparation/entries/' + table, 'PATCH', { keys: recordKeys(row), deleted: false });
-            const refreshed = await chart.reloadClinical();
+            const refreshed = ['measurements', 'cycles'].includes(table)
+              ? await chart.reloadVitals()
+              : await chart.reloadClinical();
             chart.toast(refreshed ? 'Entry restored.' : 'Restored. Reload to refresh your records.');
           } catch (failure) { error.textContent = failure.message; restore.disabled = false; }
         });
@@ -222,6 +234,6 @@
       document.getElementById(id).append(panel);
     }
   };
-  chart.preparation = { decorate, addButton, renderDeleted };
+  chart.preparation = { decorate, addButton, renderDeleted, deleteRow };
   document.addEventListener('chart:mode', () => { if (chart.mode === 'provider') { dialog.close(); modalDirty = false; } });
 })();

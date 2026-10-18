@@ -183,7 +183,24 @@ def goals_api():
 def vitals_api():
     if not session.get("user"):
         return jsonify({"error": "unauthorized"}), 401
-    return jsonify(vitals.load_vitals(get_db(), session["user"]))
+    conn, user = get_db(), session['user']
+    updates = preparation.load(conn, user)
+    data = vitals.load_vitals(conn, user)
+    data['deleted_entries'] = {}
+    for table, rows in preparation.vital_rows(data).items():
+        visible, deleted = preparation.apply_table(table, rows, updates)
+        preparation_rows = []
+        for key, update in updates.items():
+            if key.startswith(table + ':manual:'):
+                preparation_rows.append({**update['fields'], '_key': key, '_manual': True, '_patient_note': update['notes']})
+        data['deleted_entries'][table] = deleted + [r for r in preparation_rows if updates[r['_key']].get('deleted')]
+        data['visible_' + table] = visible + [r for r in preparation_rows if not updates[r['_key']].get('deleted')]
+    data['series'] = {}
+    for row in data.pop('visible_measurements'):
+        if row.get('metric') in data['metrics']:
+            data['series'].setdefault(row['metric'], []).append({'t': row['taken_at'], 'v': row['value'], 'source': row['source'], 'doc': row['doc'], 'page': row['page'], 'note': row['note'], 'seq': row['seq'], '_key': row['_key']})
+    data['cycles'] = [{**r, 'start': r['start'], 'end': r['end']} for r in data.pop('visible_cycles')]
+    return jsonify(data)
 
 
 @app.get("/api/clinical")
@@ -192,7 +209,18 @@ def clinical_api():
         return jsonify({"error": "unauthorized"}), 401
     conn = get_db()
     user = session['user']
-    return jsonify(preparation.apply(clinical.load_clinical(conn, user), preparation.load(conn, user)))
+    updates = preparation.load(conn, user)
+    source_data = clinical.load_clinical(conn, user)
+    known_documents = {row['document'] for row in source_data['documents']}
+    source_data['documents'].extend(
+        {'document': item['filename'], 'title': item['name'], 'date': None, 'provider': None,
+         'clinician': None, 'kind': None, 'summary': None, 'unextracted': True}
+        for item in available_docs(user) if item['filename'] not in known_documents
+    )
+    data = preparation.apply(source_data, updates)
+    for table, rows in preparation.vital_rows(vitals.load_vitals(conn, user)).items():
+        _, data['deleted_entries'][table] = preparation.apply_table(table, rows, updates)
+    return jsonify(data)
 
 
 @app.get('/api/preparation')
@@ -225,6 +253,12 @@ def preparation_entry(table, key=None):
     if table not in preparation.FIELDS:
         return jsonify({'error': 'Unknown record type'}), 404
     updates = preparation.load(conn, user)
+    def rows_for_table():
+        if table in ('measurements', 'cycles'):
+            return preparation.vital_rows(vitals.load_vitals(conn, user))[table]
+        if table == 'genetic_findings':
+            return genetics.load_genetics(conn, user)['findings']
+        return clinical.load_clinical(conn, user)[table]
     if request.method == 'PATCH':
         body = request.get_json(silent=True) if request.is_json else None
         if not isinstance(body, dict) or set(body) != {'keys', 'deleted'} or type(body['deleted']) is not bool:
@@ -232,7 +266,7 @@ def preparation_entry(table, key=None):
         keys = body['keys']
         if not isinstance(keys, list) or not 1 <= len(keys) <= 1000 or not all(isinstance(k, str) for k in keys):
             return jsonify({'error': 'Provide between 1 and 1,000 record keys'}), 400
-        valid = {source_key for source_key, _ in preparation.source_rows(table, clinical.load_clinical(conn, user)[table])}
+        valid = {source_key for source_key, _ in preparation.source_rows(table, rows_for_table())}
         valid.update(k for k in updates if k.startswith(table + ':manual:'))
         if any(k not in valid for k in keys):
             return jsonify({'error': 'Record not found'}), 404
@@ -244,7 +278,7 @@ def preparation_entry(table, key=None):
         return jsonify({'ok': True})
     manual = key is None or key.startswith(table + ':manual:')
     if key is not None:
-        exists = key in updates if manual else any(source_key == key for source_key, _ in preparation.source_rows(table, clinical.load_clinical(conn, user)[table]))
+        exists = key in updates if manual else any(source_key == key for source_key, _ in preparation.source_rows(table, rows_for_table()))
         if not exists or not key.startswith(table + ':'):
             return jsonify({'error': 'Record not found'}), 404
     if request.method == 'DELETE':
@@ -267,7 +301,19 @@ def preparation_entry(table, key=None):
 def genetics_api():
     if not session.get("user"):
         return jsonify({"error": "unauthorized"}), 401
-    return jsonify(genetics.load_genetics(get_db(), session["user"]))
+    conn, user = get_db(), session['user']
+    data = genetics.load_genetics(conn, user)
+    updates = preparation.load(conn, user)
+    data['findings'], data['deleted_entries'] = preparation.apply_table('genetic_findings', data['findings'], updates)
+    for row in data['findings'] + data['deleted_entries']:
+        update = updates.get(row['_key'])
+        if update and update.get('notes'):
+            row['_patient_note'] = update['notes']
+    for key, update in updates.items():
+        if key.startswith('genetic_findings:manual:'):
+            row = {**update['fields'], '_key': key, '_manual': True, '_patient_note': update['notes']}
+            (data['deleted_entries'] if update.get('deleted') else data['findings']).append(row)
+    return jsonify(data)
 
 
 def get_bucket():
