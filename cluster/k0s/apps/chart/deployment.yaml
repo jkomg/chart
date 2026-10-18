@@ -19,8 +19,8 @@ spec:
         - name: ghcr
       containers:
         - name: chart
-          image: ghcr.io/jkomg/chart:latest
-          imagePullPolicy: Always
+          image: ghcr.io/jkomg/chart@sha256:77c03ca50cc2bff08112639e36df1a9ba20d8d37cc652f2b5ccdb4a10fcfdce4  # pinned: pre-Turso/GCS build (file storage on PVC)
+          imagePullPolicy: IfNotPresent
           ports:
             - name: http
               containerPort: 8080
