@@ -6,3 +6,5 @@ data
 Data
 scripts
 *.db
+
+node_modules/

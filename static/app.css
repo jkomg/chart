@@ -206,3 +206,18 @@ body[data-mode=provider] .owner-only{display:none!important}
 @media(max-width:1100px) and (min-width:901px){.sidebar{width:225px;flex-basis:225px;padding-left:14px;padding-right:14px}.content-wrap{padding-left:28px;padding-right:28px}.lab-item{grid-template-columns:minmax(0,1fr) auto}.lab-item .spark{display:none}.lab-ref{grid-column:auto}}
 @media(max-width:900px){.brand{padding-right:100px}.mode-switch{margin:0 16px 6px;max-width:310px}.content-wrap{padding:26px 20px 60px}.filter-row{position:static;margin:0 0 18px}.nav-item{min-height:44px}.sidebar{backdrop-filter:none}.nav{padding-bottom:8px}.page-heading h1{font-size:30px}}
 @media(max-width:700px){.lab-item{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:'name value' 'spark flag' 'ref ref'}.section-content{padding:14px}.record-section>summary{padding:16px 14px;gap:10px}.section-heading{font-size:18px}.section-meta{max-width:110px}.goal-row{flex-wrap:wrap}.goal-actions{width:100%;justify-content:flex-start;margin-left:34px}.content-wrap{padding-left:16px;padding-right:16px}}
+
+/* Patient-authored content and Prepare editors. */
+.preparation-section{margin:0 0 20px}.preparation-section.has-content{background:white;border:1px solid var(--line);border-radius:12px;padding:20px}
+body[data-mode=provider] .preparation-section:not(.has-content){display:none}
+.patient-label{font-size:12px;font-weight:700;color:var(--teal);margin:12px 0 8px;text-transform:uppercase;letter-spacing:.5px}
+.patient-summary h2{font-size:20px;margin:8px 0}.patient-text{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.6;font-size:16px;margin:8px 0 14px}
+.patient-notes>summary,.section-editor>summary,.original-record>summary{cursor:pointer;min-height:44px;padding:12px 0;font-weight:600;color:var(--teal)}
+.preparation-form{display:flex;flex-direction:column;gap:16px}.preparation-form label{display:flex;flex-direction:column;gap:7px;font-size:15px;font-weight:600}
+.preparation-form textarea,.preparation-form input,.preparation-form select{width:100%;font:400 16px/1.5 'DM Sans',sans-serif;color:var(--ink);background:white;border:1px solid #b6c6bf;border-radius:8px;padding:10px 12px;min-height:44px}
+.preparation-form textarea{resize:vertical}.preparation-form h2{margin:0;font-size:24px}.preparation-form .vital-meta{margin:0}
+.editor-actions{display:flex;flex-wrap:wrap;gap:12px;align-items:center}.editor-actions button{min-height:44px}.save-status{color:var(--muted);margin:0;font-size:14px}.save-status:empty{display:none}
+.edit-record{display:block;min-height:44px;font-size:14px}.original-record p{font-size:14px;line-height:1.5;white-space:pre-wrap}
+.record-editor{width:min(600px,calc(100vw - 32px));max-height:calc(100dvh - 40px);overflow:auto;border:1px solid var(--line);border-radius:14px;padding:24px;color:var(--ink)}
+.record-editor::backdrop{background:rgba(25,40,45,.5)}
+button:disabled{cursor:wait;opacity:.55}

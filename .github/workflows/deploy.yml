@@ -24,6 +24,13 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Frontend rendering regressions
+        run: |
+          npm ci
+          npm test
       - uses: docker/setup-buildx-action@v3
       - uses: docker/build-push-action@v6
         with:

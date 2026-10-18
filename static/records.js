@@ -6,6 +6,7 @@
   const KINDS = { lab: 'Lab results', genetic: 'Genetic test', visit: 'Visit', er: 'Emergency visit', imaging: 'Imaging',
                   monitor: 'Monitoring', sleep: 'Sleep study', other: 'Document' };
   let data = null, docsByName = {};
+  const uploadedDocuments = [...document.querySelectorAll('#documents .document-card')].map(a => decodeURIComponent(a.getAttribute('href').slice(5)));
 
   // Long notes (e.g. 93 genes tested) fold away so the result stays readable.
   const longText = (text, limit = 220) => text.length <= limit ? el('p', { class: 'vital-meta' }, text)
@@ -14,34 +15,36 @@
 
   // ---------- family history ----------
   function renderFamily() {
-    if (!data.family_history.length) { body('family', el('p', {}, 'No family history recorded.')); return; }
-    const byRelation = new Map();
-    data.family_history.forEach(f => byRelation.set(f.relation, [...(byRelation.get(f.relation) || []), f]));
-    body('family', el('div', { class: 'family-grid' }, ...[...byRelation].map(([relation, rows]) =>
-      el('article', { class: 'family-card' }, el('p', { class: 'eyebrow' }, relation),
-        ...rows.map(r => el('div', {}, el('h2', {}, r.condition), sourceButton(r.document, r.page, 'Source →')))))));
+    const list = el('div', { class: 'family-grid' });
+    for (const row of data.family_history) {
+      const card = el('article', { class: 'family-card' }, el('p', { class: 'eyebrow' }, row.relation), el('h2', {}, row.condition));
+      if (row.document) card.append(sourceButton(row.document, row.page));
+      chart.preparation.decorate(card, 'family_history', row);
+      list.append(card);
+    }
+    body('family', chart.preparation.addButton('family_history'), data.family_history.length ? list : el('p', {}, 'No family history recorded.'));
   }
 
   // ---------- medications ----------
   function renderMedications() {
-    if (!data.medications.length) { body('medications', el('p', {}, 'No medications recorded.')); return; }
-    const latest = new Map();
-    for (const m of [...data.medications].sort((a, b) => (a.date || '').localeCompare(b.date || ''))) latest.set(m.name.toLowerCase(), m);
-    const rows = [...latest.values()].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-    body('medications', el('p', { class: 'vital-meta list-note' }, 'As recorded in source documents. Check with the current prescriber for what’s active today.'),
-      el('div', { class: 'medication-list' }, ...rows.map(m => el('article', { class: 'medication-row' },
-        el('div', { class: 'med-icon' }, '＋'),
-        el('div', { class: 'med-copy' }, el('h2', {}, m.name),
-          el('p', {}, [m.dose, m.schedule].filter(Boolean).join(' · ') || '—'),
-          el('p', { class: 'vital-meta' }, `${m.context || 'recorded'} · ${day(m.date)}`)),
-        sourceButton(m.document, m.page, 'Source →')))));
+    const rows = chart.groupClinicalByName(data.medications).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    const list = el('div', { class: 'medication-list' });
+    for (const row of rows) {
+      const copy = el('div', { class: 'med-copy' }, el('h2', {}, row.name), el('p', {}, [row.dose, row.schedule].filter(Boolean).join(' · ') || '—'),
+        el('p', { class: 'vital-meta' }, `${row.context || 'recorded'} · ${day(row.date)}`));
+      chart.preparation.decorate(copy, 'medications', row);
+      const card = el('article', { class: 'medication-row' }, copy);
+      if (row.document) card.append(sourceButton(row.document, row.page));
+      list.append(card);
+    }
+    body('medications', chart.preparation.addButton('medications'), el('p', { class: 'vital-meta' }, 'Source records and patient updates are labeled below.'), rows.length ? list : el('p', {}, 'No medications recorded.'));
   }
 
   // ---------- medical records ----------
   function renderDocuments() {
     if (!data.documents.length) return;
     const section = document.getElementById('documents');
-    const uploaded = [...section.querySelectorAll('.document-card')].map(a => decodeURIComponent(a.getAttribute('href').slice(5)));
+    const uploaded = uploadedDocuments;
     const known = new Set(data.documents.map(d => d.document));
     const list = el('div', { class: 'record-list' });
     let year = null;
@@ -130,11 +133,13 @@
       data = await res.json();
     } catch {
       for (const id of ['history', 'labs', 'family', 'medications']) body(id, el('p', { role: 'alert' }, 'Records could not be loaded. Reload the page to try again.'));
-      return;
+      return false;
     }
     docsByName = Object.fromEntries(data.documents.map(d => [d.document, d]));
     chart.clinicalUI.setDocuments(data.documents);
     chart.renderHistory(data); renderFamily(); renderMedications(); renderDocuments(); chart.renderLabs(data); renderGenetics();
+    return true;
   }
+  chart.reloadClinical = load;
   load();
 })();

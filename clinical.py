@@ -143,7 +143,7 @@ def load_clinical(conn, person: str) -> dict:
     order = {"documents": "date DESC", "lab_results": "test, taken_at", "events": "date DESC", "diagnoses": "date DESC",
              "medications": "date DESC", "allergies": "substance", "family_history": "relation", "clinical_genetics": "test"}
     for table, cols in TABLES.items():
-        rows = conn.execute(f"SELECT {', '.join(cols)} FROM {table} WHERE person = ? ORDER BY {order[table]}", (person,)).fetchall()
+        rows = conn.execute(f"SELECT {', '.join(cols)} FROM {table} WHERE person = ? ORDER BY {order[table]}, id", (person,)).fetchall()
         out[table] = [dict(zip(cols, r)) for r in rows]
     for row in out["lab_results"]:
         row["flag_calculated"] = False
