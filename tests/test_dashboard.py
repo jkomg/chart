@@ -65,6 +65,23 @@ class DashboardTests(unittest.TestCase):
             self.assertEqual(self.client.get(route).status_code, 401)
         self.assertEqual(self.client.post('/api/goals', json={'items': [], 'questions': []}).status_code, 401)
 
+    def test_unextracted_medical_record_can_be_annotated_deleted_and_restored(self):
+        documents = Path(self.temp.name) / 'sample-a'
+        documents.mkdir()
+        (documents / 'new_report.pdf').write_bytes(b'%PDF-1.4\\nsynthetic fixture')
+        with patch.object(app, 'GCS_BUCKET', ''), patch.object(app, 'LOCAL_DOCS_DIR', self.temp.name):
+            row = self.client.get('/api/clinical').json['documents'][0]
+            self.assertTrue(row['unextracted'])
+            url = '/api/preparation/entries/documents/' + row['_key']
+            self.assertEqual(self.client.put(url, json={'fields': {}, 'notes': 'Discuss this report'}).status_code, 200)
+            self.assertEqual(self.client.get('/api/clinical').json['documents'][0]['_patient_note'], 'Discuss this report')
+            delete_url = '/api/preparation/entries/documents'
+            self.assertEqual(self.client.patch(delete_url, json={'keys': [row['_key']], 'deleted': True}).status_code, 200)
+            self.assertEqual(self.client.get('/api/clinical').json['documents'], [])
+            self.assertEqual(self.client.patch(delete_url, json={'keys': [row['_key']], 'deleted': False}).status_code, 200)
+            restored = self.client.get('/api/clinical').json['documents'][0]
+            self.assertEqual(restored['_patient_note'], 'Discuss this report')
+
 
     def test_section_notes_are_validated_persisted_and_account_scoped(self):
         payload = {'summary': 'Sample summary', 'notes': 'First line\nSecond line'}
