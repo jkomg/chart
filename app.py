@@ -11,6 +11,7 @@ from flask import Flask, Response, abort, jsonify, redirect, render_template, re
 from google.cloud import storage as gcs
 from werkzeug.utils import secure_filename
 
+import genetics
 import vitals
 
 mimetypes.add_type("text/javascript", ".mjs")  # PDF.js ships ES modules
@@ -27,14 +28,14 @@ app = Flask(__name__)
 app.secret_key = SESSION_SECRET
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax", SESSION_COOKIE_SECURE=os.environ.get("CHART_COOKIE_SECURE", "true").lower() == "true")
 
+# Each account is fully separate: its own records, documents, vitals, and genetics.
 DEFAULT_RECORDS = {
-    "people": ["Jason", "Mia"],
-    "goals": {"why": "Keep our medical information in one calm, shared place.", "immediate": ["Add current care team and upcoming appointments.", "Upload recent lab reports and imaging."], "questions": ["What should we ask at the next visit?", "Which follow-ups are due?"]},
+    "goals": {"why": "Keep my medical information in one calm, private place.", "immediate": ["Add current care team and upcoming appointments.", "Upload recent lab reports and imaging."], "questions": ["What should we ask at the next visit?", "Which follow-ups are due?"]},
     "history": [{"date": "Add date", "title": "Medical history entry", "detail": "Replace this starter record with the relevant event, diagnosis, or procedure."}],
     "family_history": [{"relation": "Add relation", "detail": "Add family history details here."}],
     "labs": [{"date": "Add date", "name": "Lab panel", "value": "Add result", "range": "Add reference range", "status": "Pending"}],
-    "medications": [{"name": "Add medication or supplement", "dose": "Dose", "schedule": "Schedule", "person": "Jason", "status": "Current"}],
-    "synopsis": "This is a shared, private workspace for organizing medical records. It is not medical advice. Add a concise, clinician-friendly synopsis once the source records are uploaded.",
+    "medications": [{"name": "Add medication or supplement", "dose": "Dose", "schedule": "Schedule", "status": "Current"}],
+    "synopsis": "This is a private workspace for organizing medical records. It is not medical advice. Add a concise, clinician-friendly synopsis once the source records are uploaded.",
 }
 
 
@@ -51,8 +52,16 @@ def init_db():
             updated_at TEXT DEFAULT (datetime('now'))
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS user_records (
+            username TEXT PRIMARY KEY,
+            data TEXT NOT NULL,
+            updated_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
     conn.commit()
     vitals.init_schema(conn)
+    genetics.init_schema(conn)
 
 
 def hash_password(password: str, salt: bytes | None = None) -> str:
@@ -72,20 +81,17 @@ def check_password(password: str, stored: str) -> bool:
         return False
 
 
-def load_records() -> dict:
-    conn = get_db()
-    row = conn.execute("SELECT data FROM records WHERE id = 1").fetchone()
-    if row:
-        return json.loads(row[0])
-    return DEFAULT_RECORDS
+def load_records(user: str) -> dict:
+    row = get_db().execute("SELECT data FROM user_records WHERE username = ?", (user,)).fetchone()
+    return json.loads(row[0]) if row else DEFAULT_RECORDS
 
 
-def save_records(records: dict):
+def save_records(user: str, records: dict):
     conn = get_db()
     conn.execute(
-        "INSERT INTO records (id, data, updated_at) VALUES (1, ?, datetime('now')) "
-        "ON CONFLICT(id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at",
-        (json.dumps(records),),
+        "INSERT INTO user_records (username, data, updated_at) VALUES (?, ?, datetime('now')) "
+        "ON CONFLICT(username) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at",
+        (user, json.dumps(records)),
     )
     conn.commit()
 
@@ -135,7 +141,8 @@ def dashboard():
     guard = require_login()
     if guard:
         return guard
-    return render_template("dashboard.html", records=load_records(), docs=available_docs())
+    user = session["user"]
+    return render_template("dashboard.html", records=load_records(user), docs=available_docs(user))
 
 
 @app.get("/api/records")
@@ -143,18 +150,21 @@ def records_api():
     guard = require_login()
     if guard:
         return jsonify({"error": "unauthorized"}), 401
-    return jsonify(load_records())
+    return jsonify(load_records(session["user"]))
 
 
 @app.get("/api/vitals")
 def vitals_api():
     if not session.get("user"):
         return jsonify({"error": "unauthorized"}), 401
-    person = request.args.get("person", "").lower()
-    people = [name.lower() for name in load_records().get("people", [])]
-    if person not in people:
-        abort(404)
-    return jsonify(vitals.load_vitals(get_db(), person))
+    return jsonify(vitals.load_vitals(get_db(), session["user"]))
+
+
+@app.get("/api/genetics")
+def genetics_api():
+    if not session.get("user"):
+        return jsonify({"error": "unauthorized"}), 401
+    return jsonify(genetics.load_genetics(get_db(), session["user"]))
 
 
 def get_bucket():
@@ -162,18 +172,22 @@ def get_bucket():
     return client.bucket(GCS_BUCKET)
 
 
-def available_docs():
+def docs_prefix(user: str) -> str:
+    return f"docs/{user}/"
+
+
+def available_docs(user: str):
     if not GCS_BUCKET:
         if not LOCAL_DOCS_DIR:
             return []
-        paths = sorted(Path(LOCAL_DOCS_DIR).glob("*.pdf"), key=lambda p: p.stat().st_mtime, reverse=True)
+        paths = sorted((Path(LOCAL_DOCS_DIR) / user).glob("*.pdf"), key=lambda p: p.stat().st_mtime, reverse=True)
         return [{"name": p.stem.replace("_", " "), "filename": p.name, "size": round(p.stat().st_size / 1024), "updated": p.stat().st_mtime} for p in paths]
     bucket = get_bucket()
-    blobs = list(bucket.list_blobs(prefix="docs/"))
+    blobs = list(bucket.list_blobs(prefix=docs_prefix(user)))
     docs = []
     for blob in sorted(blobs, key=lambda b: b.updated, reverse=True):
-        name = blob.name.removeprefix("docs/")
-        if not name or not name.lower().endswith(".pdf"):
+        name = blob.name.removeprefix(docs_prefix(user))
+        if not name or "/" in name or not name.lower().endswith(".pdf"):
             continue
         docs.append({
             "name": name.rsplit(".", 1)[0].replace("_", " "),
@@ -193,9 +207,9 @@ def document(filename):
     if not safe_name.lower().endswith(".pdf"):
         abort(404)
     if not GCS_BUCKET and LOCAL_DOCS_DIR:
-        return send_from_directory(LOCAL_DOCS_DIR, safe_name, mimetype="application/pdf")
+        return send_from_directory(Path(LOCAL_DOCS_DIR) / session["user"], safe_name, mimetype="application/pdf")
     bucket = get_bucket()
-    blob = bucket.blob(f"docs/{safe_name}")
+    blob = bucket.blob(docs_prefix(session["user"]) + safe_name)
     if not blob.exists():
         abort(404)
     return Response(blob.download_as_bytes(), mimetype="application/pdf",
@@ -214,7 +228,7 @@ def upload_document():
     if not filename.lower().endswith(".pdf"):
         abort(415)
     bucket = get_bucket()
-    blob = bucket.blob(f"docs/{filename}")
+    blob = bucket.blob(docs_prefix(session["user"]) + filename)
     blob.upload_from_file(uploaded.stream, content_type="application/pdf")
     return redirect(url_for("dashboard") + "#documents")
 

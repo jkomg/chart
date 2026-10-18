@@ -15,7 +15,7 @@ function activate(name, { scroll = true } = {}) {
   tabs.forEach(item => item.classList.toggle('active', item === tab));
   panels.forEach(item => item.classList.toggle('active', item === panel));
   const label = [...tab.childNodes].filter(n => n.nodeType === Node.TEXT_NODE).map(n => n.textContent).join('').trim();
-  breadcrumb.innerHTML = `OUR HOUSEHOLD <span>/</span> <b>${label.toUpperCase()}</b>`;
+  breadcrumb.innerHTML = `${breadcrumb.dataset.root} <span>/</span> <b>${label.toUpperCase()}</b>`;
   tab.scrollIntoView({ block: 'nearest', inline: 'center' });
   if (scroll) window.scrollTo({ top: 0 });
   chart.lastTab = name;

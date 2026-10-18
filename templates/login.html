@@ -9,15 +9,15 @@
   <main class="login-card">
     <div class="brand-mark">✦</div>
     <p class="eyebrow">PRIVATE FAMILY HEALTH RECORD</p>
-    <h1>A clearer chart for the people who matter.</h1>
-    <p class="login-copy">A calm, shared place for your goals, history, labs, medications, and source documents.</p>
+    <h1>A clearer chart, ready for every appointment.</h1>
+    <p class="login-copy">A calm, private place for your goals, history, labs, medications, and source documents.</p>
     <form method="post" class="login-form" autocomplete="on">
       <label>Username<input name="username" autocomplete="username" required autofocus></label>
       <label>Password<input name="password" type="password" autocomplete="current-password" required></label>
       {% if error %}<p class="form-error">{{ error }}</p>{% endif %}
       <button class="primary-button" type="submit">Open our chart <span>→</span></button>
     </form>
-    <p class="security-note"><span class="lock-dot">●</span> Private by default · shared only with your household</p>
+    <p class="security-note"><span class="lock-dot">●</span> Private by default · visible only to your account</p>
   </main>
 </body>
 </html>
