@@ -84,6 +84,7 @@
     const section = document.getElementById('genetics');
     if (!section) return;
     const consumer = await fetch('/api/genetics', { credentials: 'same-origin' }).then(r => r.json()).catch(() => ({ findings: [], sources: [] }));
+    data.deleted_entries ||= {};
     data.deleted_entries.genetic_findings = consumer.deleted_entries || [];
     chart.preparation.renderDeleted(data);
     const clinicalRows = data.clinical_genetics;
