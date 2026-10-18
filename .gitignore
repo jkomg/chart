@@ -6,3 +6,4 @@ data/
 !data/medical.example.json
 .DS_Store
 *.db
+Data/

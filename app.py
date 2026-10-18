@@ -1,19 +1,27 @@
 import hashlib
 import hmac
 import json
+import mimetypes
 import os
 import secrets
+from pathlib import Path
 
 import libsql
-from flask import Flask, abort, jsonify, redirect, render_template, request, session, url_for
+from flask import Flask, Response, abort, jsonify, redirect, render_template, request, send_from_directory, session, url_for
 from google.cloud import storage as gcs
 from werkzeug.utils import secure_filename
+
+import vitals
+
+mimetypes.add_type("text/javascript", ".mjs")  # PDF.js ships ES modules
 
 SESSION_SECRET = os.environ.get("CHART_SESSION_SECRET", "change-this-before-deploying")
 USERS: dict[str, str] = json.loads(os.environ.get("CHART_USERS", "{}"))
 GCS_BUCKET = os.environ.get("GCS_BUCKET", "")
 TURSO_URL = os.environ.get("TURSO_DATABASE_URL", "")
 TURSO_TOKEN = os.environ.get("TURSO_AUTH_TOKEN", "")
+# Local development without a bucket: serve PDFs from this directory instead.
+LOCAL_DOCS_DIR = os.environ.get("CHART_LOCAL_DOCS_DIR", "")
 
 app = Flask(__name__)
 app.secret_key = SESSION_SECRET
@@ -44,6 +52,7 @@ def init_db():
         )
     """)
     conn.commit()
+    vitals.init_schema(conn)
 
 
 def hash_password(password: str, salt: bytes | None = None) -> str:
@@ -108,7 +117,10 @@ def login_post():
     if stored_hash and check_password(password, stored_hash):
         session.clear()
         session["user"] = username
-        return redirect(request.args.get("next") or url_for("dashboard"))
+        next_path = request.args.get("next", "")
+        if not next_path.startswith("/") or next_path.startswith("//"):
+            next_path = url_for("dashboard")
+        return redirect(next_path)
     return render_template("login.html", error="That login did not match. Check your username and password and try again."), 401
 
 
@@ -134,6 +146,17 @@ def records_api():
     return jsonify(load_records())
 
 
+@app.get("/api/vitals")
+def vitals_api():
+    if not session.get("user"):
+        return jsonify({"error": "unauthorized"}), 401
+    person = request.args.get("person", "").lower()
+    people = [name.lower() for name in load_records().get("people", [])]
+    if person not in people:
+        abort(404)
+    return jsonify(vitals.load_vitals(get_db(), person))
+
+
 def get_bucket():
     client = gcs.Client()
     return client.bucket(GCS_BUCKET)
@@ -141,7 +164,10 @@ def get_bucket():
 
 def available_docs():
     if not GCS_BUCKET:
-        return []
+        if not LOCAL_DOCS_DIR:
+            return []
+        paths = sorted(Path(LOCAL_DOCS_DIR).glob("*.pdf"), key=lambda p: p.stat().st_mtime, reverse=True)
+        return [{"name": p.stem.replace("_", " "), "filename": p.name, "size": round(p.stat().st_size / 1024), "updated": p.stat().st_mtime} for p in paths]
     bucket = get_bucket()
     blobs = list(bucket.list_blobs(prefix="docs/"))
     docs = []
@@ -166,11 +192,12 @@ def document(filename):
     safe_name = secure_filename(filename)
     if not safe_name.lower().endswith(".pdf"):
         abort(404)
+    if not GCS_BUCKET and LOCAL_DOCS_DIR:
+        return send_from_directory(LOCAL_DOCS_DIR, safe_name, mimetype="application/pdf")
     bucket = get_bucket()
     blob = bucket.blob(f"docs/{safe_name}")
     if not blob.exists():
         abort(404)
-    from flask import Response
     return Response(blob.download_as_bytes(), mimetype="application/pdf",
                     headers={"Content-Disposition": f"inline; filename=\"{safe_name}\""})
 
