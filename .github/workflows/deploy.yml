@@ -66,12 +66,11 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
       # Only the image changes; env vars and Secret Manager refs on the service are kept.
-      - uses: google-github-actions/deploy-cloudrun@v2
+      - id: deploy
+        uses: google-github-actions/deploy-cloudrun@v2
         with:
           service: ${{ env.SERVICE }}
           region: ${{ env.REGION }}
           image: ${{ env.IMAGE }}:${{ github.sha }}
       - name: Smoke test
-        run: |
-          url=$(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.url)')
-          curl -fsS -o /dev/null -w "GET /login -> %{http_code}\n" "$url/login"
+        run: curl -fsS --retry 3 -o /dev/null -w "GET /login -> %{http_code}\n" "${{ steps.deploy.outputs.url }}/login"
