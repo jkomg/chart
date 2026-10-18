@@ -42,14 +42,13 @@
 
   // ---------- medical records ----------
   function renderDocuments() {
-    if (!data.documents.length) return;
     const section = document.getElementById('documents');
     const uploaded = uploadedDocuments;
     const known = new Set(data.documents.map(d => d.document));
     const list = el('div', { class: 'record-list' });
     let year = null;
     for (const d of data.documents) {
-      const y = (d.date || '').slice(0, 4);
+      const y = d.unextracted ? 'Uploaded, not yet extracted' : (d.date || '').slice(0, 4) || 'Undated';
       if (y !== year) { year = y; list.append(el('p', { class: 'eyebrow timeline-year' }, y || 'Undated')); }
       const row = el('a', { class: 'record-row', href: `#doc/${encodeURIComponent(d.document)}` },
         el('div', { class: 'pdf-icon' }, 'PDF'),
@@ -58,9 +57,12 @@
           el('p', { class: 'vital-meta' }, [day(d.date), d.provider, d.clinician].filter(Boolean).join(' · ')),
           d.summary ? el('p', { class: 'record-summary' }, d.summary) : null),
         el('span', { class: 'record-arrow' }, '→'));
-      list.append(row);
+      const entry = el('article', { class: 'document-entry' }, row);
+      chart.preparation.decorate(entry, 'documents', d);
+      list.append(entry);
     }
-    const extra = uploaded.filter(n => !known.has(n));
+    const deletedDocuments = new Set((data.deleted_entries?.documents || []).map(d => d.document));
+    const extra = uploaded.filter(n => !known.has(n) && !deletedDocuments.has(n));
     if (extra.length) {
       list.append(el('p', { class: 'eyebrow timeline-year' }, 'Uploaded, not yet extracted'));
       extra.forEach(n => list.append(el('a', { class: 'record-row', href: `#doc/${encodeURIComponent(n)}` },
@@ -82,6 +84,8 @@
     const section = document.getElementById('genetics');
     if (!section) return;
     const consumer = await fetch('/api/genetics', { credentials: 'same-origin' }).then(r => r.json()).catch(() => ({ findings: [], sources: [] }));
+    data.deleted_entries.genetic_findings = consumer.deleted_entries || [];
+    chart.preparation.renderDeleted(data);
     const clinicalRows = data.clinical_genetics;
     const kids = [];
     const tone = c => /^pathogenic|likely pathogenic/i.test(c || '') ? 'bad' : /uncertain|vus/i.test(c || '') ? 'warn' : /negative|benign/i.test(c || '') ? 'good' : '';
@@ -91,13 +95,13 @@
       clinicalRows.forEach(f => byDoc.set(f.document, [...(byDoc.get(f.document) || []), f]));
       for (const [doc, findings] of byDoc) {
         const meta = docsByName[doc] || {};
-        const rows = findings.map(f => el('div', { class: 'gene-row' },
+        const rows = findings.map(f => chart.preparation.decorate(el('div', { class: 'gene-row' },
           el('div', { class: 'gene-main' }, el('b', {}, f.gene || f.test || 'Result'),
             el('span', { class: 'mono' }, [f.variant, f.protein].filter(Boolean).join(' ') || ''),
             f.condition ? el('p', { class: 'vital-meta' }, [f.condition, f.inheritance].filter(Boolean).join(' · ')) : null,
             f.note ? longText(f.note) : null),
           el('div', { class: 'gene-side' }, chip(f.classification || 'Reported', tone(f.classification)),
-            f.zygosity ? el('span', { class: 'vital-meta' }, f.zygosity) : null, sourceButton(f.document, f.page, 'Source →'))));
+            f.zygosity ? el('span', { class: 'vital-meta' }, f.zygosity) : null, sourceButton(f.document, f.page, 'Source →'))), 'clinical_genetics', f));
         kids.push(el('article', { class: 'vital-card' },
           el('div', { class: 'vital-head' }, el('div', {}, el('h2', { class: 'card-title' }, meta.title || findings[0].test || doc),
             el('p', { class: 'vital-meta' }, [day(meta.date), meta.provider, 'Clinical test'].filter(Boolean).join(' · ')))),
@@ -114,7 +118,7 @@
         if (!rows.length) continue;
         const tbody = el('tbody');
         rows.forEach(f => tbody.append(el('tr', { class: f.detected ? 'detected' : '' },
-          el('td', {}, el('b', {}, f.label), f.condition ? el('div', { class: 'vital-meta' }, f.condition) : null, f.note ? el('div', { class: 'vital-meta' }, f.note) : null),
+          chart.preparation.decorate(el('td', {}, el('b', {}, f.label), f.condition ? el('div', { class: 'vital-meta' }, f.condition) : null, f.note ? el('div', { class: 'vital-meta' }, f.note) : null), 'genetic_findings', f),
           el('td', {}, f.result, f.classification ? el('div', { class: 'vital-meta' }, `${f.classification}${f.review_stars ? ` · ${'★'.repeat(f.review_stars)}` : ''}`) : null),
           el('td', { class: 'mono' }, `${f.rsid.replace(/,/g, ', ')}\n${f.genotype || '--'}`))));
         kids.push(card(title, el('div', { class: 'reading-table tall' }, el('table', {}, el('thead', {}, el('tr', {},

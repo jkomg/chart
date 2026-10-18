@@ -58,6 +58,7 @@
         const res = await fetch('/api/vitals', { credentials: 'same-origin' });
         if (res.status === 401) { location.href = '/login'; return; }
         state.data = await res.json();
+        chart.preparation.renderDeleted(state.data);
       } catch {
         body.classList.remove('refreshing');
         chart.toast('Couldn’t load vitals. Check the connection and try again.');
@@ -67,6 +68,12 @@
     body.classList.remove('refreshing');
     render();
   }
+  chart.reloadVitals = async () => {
+    state.data = null;
+    await load();
+    if (state.data) chart.preparation.renderDeleted(state.data);
+    return Boolean(state.data);
+  };
 
   // ---------- page ----------
   function render() {
@@ -366,12 +373,13 @@
     const byDate = new Map();
     lines.forEach((l, i) => l.points.forEach(p => {
       const key = `${p.t.slice(0, 10)}#${p.seq || 0}`;
-      const row = byDate.get(key) || { d: p.d, seq: p.seq || 0, values: [], src: p };
+      const row = byDate.get(key) || { d: p.d, seq: p.seq || 0, values: [], src: p, keys: [] };
       row.values[i] = p.v;
+      row.keys.push(p._key);
       byDate.set(key, row);
     }));
     const table = el('table', {}, el('thead', {}, el('tr', {}, el('th', {}, 'Date'),
-      ...lines.map(l => el('th', { class: 'num' }, `${lines.length > 1 ? l.label : 'Value'} (${unit})`)), el('th', {}, 'Source'))));
+      ...lines.map(l => el('th', { class: 'num' }, `${lines.length > 1 ? l.label : 'Value'} (${unit})`)), el('th', {}, 'Source'), el('th', { class: 'owner-only' }, ''))));
     const tbody = el('tbody');
     [...byDate.values()].sort((a, b) => b.d - a.d || a.seq - b.seq).forEach(row => {
       const src = el('td', {}, SOURCES[row.src.source] || row.src.source);
@@ -380,8 +388,12 @@
         b.addEventListener('click', () => chart.openDoc(row.src.doc, row.src.page));
         src.append(b);
       }
+      const action = el('td', {});
+      const remove = el('button', { type: 'button', class: 'text-button owner-only' }, 'Delete result');
+      remove.addEventListener('click', () => chart.preparation.deleteRow('measurements', { sources: row.keys.map(_key => ({ _key })) }, chart.reloadVitals));
+      action.append(remove);
       tbody.append(el('tr', {}, el('td', {}, fmtDate(row.d)),
-        ...lines.map((_, i) => el('td', { class: 'num' }, row.values[i] == null ? '—' : fmt(row.values[i], decimals))), src));
+        ...lines.map((_, i) => el('td', { class: 'num' }, row.values[i] == null ? '—' : fmt(row.values[i], decimals))), src, action));
     });
     table.append(tbody);
     return table;
@@ -488,10 +500,14 @@
       button.textContent = open ? 'Hide table' : 'Show periods as a table';
       if (!open || holder.firstChild) return;
       const tbody = el('tbody');
-      [...cycles].reverse().forEach(c => tbody.append(el('tr', {},
+    [...cycles].reverse().forEach(c => {
+      const remove = el('button', { type: 'button', class: 'text-button owner-only' }, 'Delete');
+      remove.addEventListener('click', () => chart.preparation.deleteRow('cycles', c, chart.reloadVitals));
+      tbody.append(el('tr', {},
         el('td', {}, fmtDate(c.s)), el('td', {}, c.e ? fmtDate(c.e) : '—'),
         el('td', { class: 'num' }, c.e ? String(Math.round((c.e - c.s) / DAY) + 1) : '—'),
-        el('td', { class: 'num' }, lengthByStart.has(c.start) ? String(lengthByStart.get(c.start)) : '—'))));
+        el('td', { class: 'num' }, lengthByStart.has(c.start) ? String(lengthByStart.get(c.start)) : '—'), el('td', {}, remove)));
+    });
       holder.append(el('table', {}, el('thead', {}, el('tr', {}, el('th', {}, 'Started'), el('th', {}, 'Ended'),
         el('th', { class: 'num' }, 'Period days'), el('th', { class: 'num' }, 'Cycle length'))), tbody));
     });

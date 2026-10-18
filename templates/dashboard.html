@@ -10,7 +10,7 @@
     <aside class="sidebar">
       <div class="brand"><div class="brand-mark small">✦</div><div><strong>chart</strong><span>{{ current_user|capitalize }}’s record</span></div></div>
       <div class="people-pill"><span class="avatar">{{ current_user[:2]|upper }}</span><span><b>{{ current_user|capitalize }}</b><small>Private account</small></span><span class="chevron">⌄</span></div>
-      <div class="mode-switch" role="group" aria-label="View mode"><button type="button" data-mode="provider" aria-pressed="true">Provider</button><button type="button" data-mode="owner" aria-pressed="false">Prepare</button></div>
+      <div class="presentation-controls owner-only"><p class="nav-label">Prepare your visit</p><button type="button" class="primary-button mode-action" data-mode="provider">Present to provider <span aria-hidden="true">↗</span></button></div>
       <nav class="nav" aria-label="Primary">
         <p class="nav-label">Workspace</p>
         <button class="nav-item active" data-tab="goals"><span class="nav-icon">◎</span>Visit priorities{% if records.goals["items"] %} <em>{{ records.goals["items"]|length }}</em>{% endif %}</button>
@@ -22,10 +22,10 @@
         <button class="nav-item" data-tab="genetics"><span class="nav-icon">⧬</span>Genetics</button>
         <button class="nav-item" data-tab="documents"><span class="nav-icon">▤</span>Medical records <em>{{ docs|length }}</em></button>
       </nav>
-      <div class="sidebar-bottom"><div class="sync-status"><span></span><div><b>Private workspace</b><small>Encrypted in transit</small></div></div><form method="post" action="{{ url_for('logout') }}"><button class="logout-button">Sign out <span>↗</span></button></form></div>
+      <div class="sidebar-bottom"><button type="button" class="exit-presentation mode-action" data-mode="owner" title="Return to Prepare to edit your chart">Exit presentation</button><div class="sync-status"><span></span><div><b>Private workspace</b><small>Encrypted in transit</small></div></div><form method="post" action="{{ url_for('logout') }}"><button class="logout-button">Sign out <span>↗</span></button></form></div>
     </aside>
     <main class="main-content">
-      <header class="topbar"><div class="breadcrumb" data-root="{{ current_user|upper }}">{{ current_user|upper }} <span>/</span> <b>VISIT PRIORITIES</b></div><div class="view-label">{{ current_user|capitalize }} · <span id="view-label">Provider view</span></div></header>
+      <header class="topbar"><div class="breadcrumb" data-root="{{ current_user|upper }}">{{ current_user|upper }} <span>/</span> <b>VISIT PRIORITIES</b></div><div class="view-label owner-only">{{ current_user|capitalize }} · <span id="view-label">Provider view</span></div></header>
       <div class="content-wrap">
         <section class="tab-panel active" id="goals">
           <div class="page-heading"><div><h1>Visit priorities</h1><p class="subtitle">What matters most for this appointment.</p></div></div>
