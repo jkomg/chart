@@ -3,22 +3,47 @@ import hmac
 import json
 import os
 import secrets
-from pathlib import Path
 
-from flask import Flask, abort, jsonify, redirect, render_template, request, send_from_directory, session, url_for
+import libsql_experimental as libsql
+from flask import Flask, abort, jsonify, redirect, render_template, request, session, url_for
+from google.cloud import storage as gcs
 from werkzeug.utils import secure_filename
 
-
-BASE_DIR = Path(__file__).resolve().parent
-DATA_DIR = Path(os.environ.get("CHART_DATA_DIR", BASE_DIR / "data"))
-DOCS_DIR = DATA_DIR / "docs"
-DATA_FILE = DATA_DIR / "medical.json"
 SESSION_SECRET = os.environ.get("CHART_SESSION_SECRET", "change-this-before-deploying")
-USERS: dict[str, str] = json.loads(os.environ.get("CHART_USERS", "{}"))  # {"username": "password_hash", ...}
+USERS: dict[str, str] = json.loads(os.environ.get("CHART_USERS", "{}"))
+GCS_BUCKET = os.environ.get("GCS_BUCKET", "")
+TURSO_URL = os.environ.get("TURSO_DATABASE_URL", "")
+TURSO_TOKEN = os.environ.get("TURSO_AUTH_TOKEN", "")
 
 app = Flask(__name__)
 app.secret_key = SESSION_SECRET
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax", SESSION_COOKIE_SECURE=os.environ.get("CHART_COOKIE_SECURE", "true").lower() == "true")
+
+DEFAULT_RECORDS = {
+    "people": ["Jason", "Mia"],
+    "goals": {"why": "Keep our medical information in one calm, shared place.", "immediate": ["Add current care team and upcoming appointments.", "Upload recent lab reports and imaging."], "questions": ["What should we ask at the next visit?", "Which follow-ups are due?"]},
+    "history": [{"date": "Add date", "title": "Medical history entry", "detail": "Replace this starter record with the relevant event, diagnosis, or procedure."}],
+    "family_history": [{"relation": "Add relation", "detail": "Add family history details here."}],
+    "labs": [{"date": "Add date", "name": "Lab panel", "value": "Add result", "range": "Add reference range", "status": "Pending"}],
+    "medications": [{"name": "Add medication or supplement", "dose": "Dose", "schedule": "Schedule", "person": "Jason", "status": "Current"}],
+    "synopsis": "This is a shared, private workspace for organizing medical records. It is not medical advice. Add a concise, clinician-friendly synopsis once the source records are uploaded.",
+}
+
+
+def get_db():
+    return libsql.connect(database=TURSO_URL, auth_token=TURSO_TOKEN)
+
+
+def init_db():
+    conn = get_db()
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS records (
+            id INTEGER PRIMARY KEY DEFAULT 1,
+            data TEXT NOT NULL,
+            updated_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    conn.commit()
 
 
 def hash_password(password: str, salt: bytes | None = None) -> str:
@@ -39,20 +64,21 @@ def check_password(password: str, stored: str) -> bool:
 
 
 def load_records() -> dict:
-    if DATA_FILE.exists():
-        try:
-            return json.loads(DATA_FILE.read_text())
-        except json.JSONDecodeError:
-            pass
-    return {
-        "people": ["Jason", "Mia"],
-        "goals": {"why": "Keep our medical information in one calm, shared place.", "immediate": ["Add current care team and upcoming appointments.", "Upload recent lab reports and imaging."], "questions": ["What should we ask at the next visit?", "Which follow-ups are due?"]},
-        "history": [{"date": "Add date", "title": "Medical history entry", "detail": "Replace this starter record with the relevant event, diagnosis, or procedure."}],
-        "family_history": [{"relation": "Add relation", "detail": "Add family history details here."}],
-        "labs": [{"date": "Add date", "name": "Lab panel", "value": "Add result", "range": "Add reference range", "status": "Pending"}],
-        "medications": [{"name": "Add medication or supplement", "dose": "Dose", "schedule": "Schedule", "person": "Jason", "status": "Current"}],
-        "synopsis": "This is a shared, private workspace for organizing medical records. It is not medical advice. Add a concise, clinician-friendly synopsis once the source records are uploaded.",
-    }
+    conn = get_db()
+    row = conn.execute("SELECT data FROM records WHERE id = 1").fetchone()
+    if row:
+        return json.loads(row[0])
+    return DEFAULT_RECORDS
+
+
+def save_records(records: dict):
+    conn = get_db()
+    conn.execute(
+        "INSERT INTO records (id, data, updated_at) VALUES (1, ?, datetime('now')) "
+        "ON CONFLICT(id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at",
+        (json.dumps(records),),
+    )
+    conn.commit()
 
 
 def require_login():
@@ -108,11 +134,27 @@ def records_api():
     return jsonify(load_records())
 
 
+def get_bucket():
+    client = gcs.Client()
+    return client.bucket(GCS_BUCKET)
+
+
 def available_docs():
-    DOCS_DIR.mkdir(parents=True, exist_ok=True)
+    if not GCS_BUCKET:
+        return []
+    bucket = get_bucket()
+    blobs = list(bucket.list_blobs(prefix="docs/"))
     docs = []
-    for path in sorted(DOCS_DIR.glob("*.pdf"), key=lambda item: item.stat().st_mtime, reverse=True):
-        docs.append({"name": path.stem.replace("_", " "), "filename": path.name, "size": round(path.stat().st_size / 1024), "updated": path.stat().st_mtime})
+    for blob in sorted(blobs, key=lambda b: b.updated, reverse=True):
+        name = blob.name.removeprefix("docs/")
+        if not name or not name.lower().endswith(".pdf"):
+            continue
+        docs.append({
+            "name": name.rsplit(".", 1)[0].replace("_", " "),
+            "filename": name,
+            "size": round(blob.size / 1024),
+            "updated": blob.updated.timestamp(),
+        })
     return docs
 
 
@@ -121,10 +163,16 @@ def document(filename):
     guard = require_login()
     if guard:
         return guard
-    safe_path = (DOCS_DIR / filename).resolve()
-    if safe_path.parent != DOCS_DIR.resolve() or safe_path.suffix.lower() != ".pdf":
+    safe_name = secure_filename(filename)
+    if not safe_name.lower().endswith(".pdf"):
         abort(404)
-    return send_from_directory(DOCS_DIR, safe_path.name, as_attachment=False)
+    bucket = get_bucket()
+    blob = bucket.blob(f"docs/{safe_name}")
+    if not blob.exists():
+        abort(404)
+    from flask import Response
+    return Response(blob.download_as_bytes(), mimetype="application/pdf",
+                    headers={"Content-Disposition": f"inline; filename=\"{safe_name}\""})
 
 
 @app.post("/documents/upload")
@@ -138,12 +186,14 @@ def upload_document():
     filename = secure_filename(uploaded.filename)
     if not filename.lower().endswith(".pdf"):
         abort(415)
-    DOCS_DIR.mkdir(parents=True, exist_ok=True)
-    uploaded.save(DOCS_DIR / filename)
+    bucket = get_bucket()
+    blob = bucket.blob(f"docs/{filename}")
+    blob.upload_from_file(uploaded.stream, content_type="application/pdf")
     return redirect(url_for("dashboard") + "#documents")
 
 
+if TURSO_URL:
+    init_db()
+
 if __name__ == "__main__":
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    DOCS_DIR.mkdir(parents=True, exist_ok=True)
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", "8080")))

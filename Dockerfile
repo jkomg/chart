@@ -11,8 +11,7 @@ COPY templates templates
 COPY static static
 
 RUN addgroup --system chart && adduser --system --ingroup chart chart \
-    && mkdir -p /data/docs \
-    && chown -R chart:chart /app /data
+    && chown -R chart:chart /app
 USER chart
 
 EXPOSE 8080
