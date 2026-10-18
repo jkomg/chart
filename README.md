@@ -98,3 +98,16 @@ records; they do not establish what is current today.
 Frontend modules: `clinical-ui.js` provides shared source links and accordions;
 `labs.js` and `history.js` render those sections; `records.js` loads clinical data
 and renders the remaining record views. No build step or new dependencies are needed.
+
+Prepare also provides an editable summary and Notes subsection for every tab. Saved
+text appears in Provider view with a patient-provided label. Conditions, allergies,
+events/procedures, medications, and family history support patient-entered additions
+and updates through **Edit / add notes**. Imported entries retain their original
+recorded details and source links; **Restore original record** removes an update.
+Patient-entered entries can be removed. Expanded lab histories support patient notes;
+lab values remain as recorded.
+
+These edits live in the account-scoped `preparation` table, independently of imports
+and goal ordering. Re-importing an unchanged source preserves its updates. Record
+identity uses the source document/page, date, and identifying labels; a changed source
+identity requires reviewing and reapplying any prior patient update.

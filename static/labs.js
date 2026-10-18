@@ -119,6 +119,15 @@
     box.append(el('div', { class: 'reading-table' }, el('table', {}, el('thead', {}, el('tr', {},
       el('th', {}, 'Date'), el('th', { class: 'num' }, 'Result'), el('th', {}, 'Flag'), el('th', {}, 'Reference'), el('th', {}, 'Source'))), tbody)));
     if (new Set(g.rows.map(r => r.unit)).size > 1) box.append(el('p', { class: 'vital-meta' }, 'Note: results were reported in different units; the chart may mix them.'));
+    const notes = el('div', { class: 'lab-patient-notes' }, el('h3', {}, 'Notes by result date'));
+    for (const row of [...g.rows].reverse()) {
+      const entry = el('div', { class: 'lab-result-note' }, el('p', { class: 'vital-meta' }, day(row.taken_at)));
+      chart.preparation.decorate(entry, 'lab_results', row);
+      if (!row._patient_note) entry.classList.add('owner-only');
+      notes.append(entry);
+    }
+    if (!g.rows.some(row => row._patient_note)) notes.classList.add('owner-only');
+    box.append(notes);
     return box;
   }
 
@@ -126,10 +135,14 @@
     if (!data.lab_results.length) { body('labs', el('p', {}, 'No lab results recorded.')); return; }
     const groups = labGroups();
     const section = document.getElementById('labs');
+    section.querySelector('.filter-row')?.remove();
     if (!section.querySelector('.filter-row')) {
       const search = el('input', { type: 'search', class: 'search-input', placeholder: 'Search all tests, including collapsed categories', 'aria-label': 'Find a test' });
+      search.value = labState.query;
       search.addEventListener('input', () => { labState.query = search.value.trim().toLowerCase(); drawLabList(); });
       const toggle = el('button', { type: 'button', class: 'toggle-button', 'aria-pressed': 'false' }, 'Out of range only');
+      toggle.setAttribute('aria-pressed', String(labState.flagged));
+      toggle.classList.toggle('on', labState.flagged);
       toggle.addEventListener('click', () => { labState.flagged = !labState.flagged; toggle.setAttribute('aria-pressed', labState.flagged); toggle.classList.toggle('on', labState.flagged); drawLabList(); });
       section.querySelector('.page-heading').after(el('div', { class: 'filter-row' }, search, toggle));
     }
@@ -142,7 +155,7 @@
 
     function drawLabList() {
       const shown = groups.filter(g => (!labState.flagged || g.flagged) && (!labState.query || g.test.toLowerCase().includes(labState.query)
-        || g.panel.toLowerCase().includes(labState.query) || g.rows.some(r => [r.test_reported, r.panel, r.provider].filter(Boolean).join(' ').toLowerCase().includes(labState.query))));
+        || g.panel.toLowerCase().includes(labState.query) || g.rows.some(r => [r.test_reported, r.panel, r.provider, r._patient_note].filter(Boolean).join(' ').toLowerCase().includes(labState.query))));
       list.replaceChildren();
       if (!shown.length) { list.append(el('p', { class: 'vital-empty' }, 'No tests match.')); return; }
       const filtering = Boolean(labState.query || labState.flagged);
@@ -172,7 +185,7 @@
               g.numeric.length >= 2 ? sparkline(g.numeric) : el('span', { class: 'spark' }),
               el('span', { class: 'lab-value' }, valueText(g.latest)),
               el('span', { class: 'lab-flag' }, flagChip(g.latest.flag, g.latest.flag_calculated) || ''),
-              el('span', { class: 'lab-ref' }, refText(g.latest) ? `Reference: ${refText(g.latest)}` : 'Reference range not reported'));
+              el('span', { class: 'lab-ref' }, (refText(g.latest) ? `Reference: ${refText(g.latest)}` : 'Reference range not reported') + (g.rows.some(r => r._patient_note) ? ' · Patient note available in history' : '')));
             const wrap = el('div', { class: 'lab-wrap' }, row);
             if (open) wrap.append(labDetail(g));
             row.addEventListener('click', () => {

@@ -4,6 +4,7 @@
   chart.renderHistory = data => {
     const { events, diagnoses, allergies } = data;
     const search = el('input', { type: 'search', class: 'search-input', placeholder: 'Search conditions, procedures, or visits', 'aria-label': 'Search medical history' });
+    search.value = document.querySelector('#history input[type=search]')?.value || '';
     const results = el('div', { class: 'history-sections' });
     const status = el('p', { class: 'search-status', role: 'status' });
     const openSections = new Set(['Allergies', 'Active conditions', 'Conditions · status unconfirmed']);
@@ -13,7 +14,7 @@
       for (const row of [...rows].sort((a, b) => (a.date || '').localeCompare(b.date || ''))) {
         const key = row.name.toLowerCase();
         const existing = grouped.get(key);
-        grouped.set(key, { ...row, sources: [...(existing?.sources || []), row] });
+        grouped.set(key, { ...row, sources: [...(existing?.sources || []), ...(row.document ? [row] : [])] });
       }
       return [...grouped.values()];
     };
@@ -45,11 +46,12 @@
             el('p', { class: 'vital-meta' }, type === 'allergy' ? row.reaction || 'Reaction not recorded' :
               [day(row.date), row.status || (type === 'condition' ? 'Status unconfirmed' : row.type)].filter(Boolean).join(' · ')));
           if (row.detail || row.note) entry.append(el('p', { class: 'history-note' }, row.detail || row.note));
-          if (row.sources) {
+          if (row.sources?.length) {
             const sources = el('details', { class: 'condition-sources' }, el('summary', {}, `${row.sources.length} source record${row.sources.length === 1 ? '' : 's'}`));
             for (const src of [...row.sources].reverse()) sources.append(el('div', {}, sourceButton(src.document, src.page, `${day(src.date)} · ${src.status || 'Status unconfirmed'} · source →`)));
             entry.append(sources);
-          } else entry.append(sourceButton(row.document, row.page));
+          } else if (row.document) entry.append(sourceButton(row.document, row.page));
+          chart.preparation.decorate(entry, type === 'condition' ? 'diagnoses' : type === 'allergy' ? 'allergies' : 'events', row);
           list.append(entry);
         }
         const section = accordion(title, `${shown.length} ${shown.length === 1 ? 'entry' : 'entries'}`, list, Boolean(query) || openSections.has(title));
@@ -60,8 +62,8 @@
       if (!count) results.append(el('p', {}, query ? 'No history matches your search.' : 'No medical history recorded.'));
     }
     search.addEventListener('input', draw);
-    body('history', el('div', { class: 'filter-row plain' }, search),
-      el('p', { class: 'vital-meta' }, 'Status reflects the latest source mention and may need confirmation.'), status, results);
+    body('history', el('div', { class: 'editor-actions owner-only' }, chart.preparation.addButton('diagnoses'), chart.preparation.addButton('allergies'), chart.preparation.addButton('events')), el('div', { class: 'filter-row plain' }, search),
+      el('p', { class: 'vital-meta' }, 'Dates and status reflect source records or labeled patient updates; confirm current status at the visit.'), status, results);
     draw();
   };
 })();

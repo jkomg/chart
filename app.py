@@ -14,6 +14,7 @@ from werkzeug.utils import secure_filename
 
 import clinical
 import genetics
+import preparation
 import vitals
 
 mimetypes.add_type("text/javascript", ".mjs")  # PDF.js ships ES modules
@@ -65,6 +66,7 @@ def init_db():
     vitals.init_schema(conn)
     genetics.init_schema(conn)
     clinical.init_schema(conn)
+    preparation.init_schema(conn)
 
 
 def hash_password(password: str, salt: bytes | None = None) -> str:
@@ -148,7 +150,7 @@ def dashboard():
     if guard:
         return guard
     user = session["user"]
-    return render_template("dashboard.html", records=load_records(user), docs=available_docs(user))
+    return render_template("dashboard.html", records=load_records(user), docs=available_docs(user), preparation=preparation.load(get_db(), user))
 
 
 @app.get("/api/records")
@@ -188,7 +190,58 @@ def vitals_api():
 def clinical_api():
     if not session.get("user"):
         return jsonify({"error": "unauthorized"}), 401
-    return jsonify(clinical.load_clinical(get_db(), session["user"]))
+    conn = get_db()
+    user = session['user']
+    return jsonify(preparation.apply(clinical.load_clinical(conn, user), preparation.load(conn, user)))
+
+
+@app.get('/api/preparation')
+def preparation_api():
+    if not session.get('user'):
+        return jsonify({'error': 'unauthorized'}), 401
+    return jsonify(preparation.load(get_db(), session['user']))
+
+
+@app.put('/api/preparation/sections/<section>')
+def preparation_section(section):
+    if not session.get('user'):
+        return jsonify({'error': 'unauthorized'}), 401
+    body = request.get_json(silent=True) if request.is_json else None
+    if section not in preparation.SECTIONS or not isinstance(body, dict) or set(body) != {'summary', 'notes'}:
+        return jsonify({'error': 'Provide a summary and notes for a supported section'}), 400
+    if any(not isinstance(v, str) or len(v) > 10000 for v in body.values()):
+        return jsonify({'error': 'Summary and notes must be text up to 10,000 characters each'}), 400
+    update = {k: v.strip() for k, v in body.items()}
+    preparation.save(get_db(), session['user'], 'section:' + section, update)
+    return jsonify(update)
+
+
+@app.route('/api/preparation/entries/<table>', methods=['POST'])
+@app.route('/api/preparation/entries/<table>/<key>', methods=['PUT', 'DELETE'])
+def preparation_entry(table, key=None):
+    if not session.get('user'):
+        return jsonify({'error': 'unauthorized'}), 401
+    conn, user = get_db(), session['user']
+    if table not in preparation.FIELDS:
+        return jsonify({'error': 'Unknown record type'}), 404
+    updates = preparation.load(conn, user)
+    manual = key is None or key.startswith(table + ':manual:')
+    if key is not None:
+        exists = key in updates if manual else any(preparation.key_for(table, row) == key for row in clinical.load_clinical(conn, user)[table])
+        if not exists or not key.startswith(table + ':'):
+            return jsonify({'error': 'Record not found'}), 404
+    if request.method == 'DELETE':
+        conn.execute('DELETE FROM preparation WHERE person = ? AND key = ?', (user, key))
+        conn.commit()
+        return jsonify({'ok': True})
+    body = request.get_json(silent=True) if request.is_json else None
+    try:
+        update = preparation.validate_entry(table, body, manual)
+    except ValueError as error:
+        return jsonify({'error': str(error)}), 400
+    key = key or preparation.manual_key(table)
+    preparation.save(conn, user, key, update)
+    return jsonify({'key': key, **update}), 201 if request.method == 'POST' else 200
 
 
 @app.get("/api/genetics")

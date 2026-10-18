@@ -58,6 +58,10 @@ document.querySelectorAll('[data-toast]').forEach(button => button.addEventListe
 // A presentation mode on the signed-in account, not a separate provider login.
 chart.mode = 'provider';
 chart.setMode = (mode, navigate = false) => {
+  if (mode === 'provider' && chart.hasUnsavedPreparation?.()) {
+    if (!confirm('Discard unsaved edits and switch to Provider view?')) return;
+    document.dispatchEvent(new CustomEvent('chart:discardPreparation'));
+  }
   chart.mode = mode === 'owner' ? 'owner' : 'provider';
   document.body.dataset.mode = chart.mode;
   document.querySelectorAll('.mode-switch button').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.mode === chart.mode)));
