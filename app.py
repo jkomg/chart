@@ -210,17 +210,23 @@ def clinical_api():
     conn = get_db()
     user = session['user']
     updates = preparation.load(conn, user)
-    source_data = clinical.load_clinical(conn, user)
-    known_documents = {row['document'] for row in source_data['documents']}
-    source_data['documents'].extend(
-        {'document': item['filename'], 'title': item['name'], 'date': None, 'provider': None,
-         'clinician': None, 'kind': None, 'summary': None, 'unextracted': True}
-        for item in available_docs(user) if item['filename'] not in known_documents
-    )
+    source_data = clinical_records_for_person(conn, user)
     data = preparation.apply(source_data, updates)
     for table, rows in preparation.vital_rows(vitals.load_vitals(conn, user)).items():
         _, data['deleted_entries'][table] = preparation.apply_table(table, rows, updates)
     return jsonify(data)
+
+
+def clinical_records_for_person(conn, user):
+    """Return extracted records plus uploaded PDFs that have not been extracted yet."""
+    data = clinical.load_clinical(conn, user)
+    known_documents = {row['document'] for row in data['documents']}
+    data['documents'].extend(
+        {'document': item['filename'], 'title': item['name'], 'date': None, 'provider': None,
+         'clinician': None, 'kind': None, 'summary': None, 'unextracted': True}
+        for item in available_docs(user) if item['filename'] not in known_documents
+    )
+    return data
 
 
 @app.get('/api/preparation')
@@ -258,6 +264,8 @@ def preparation_entry(table, key=None):
             return preparation.vital_rows(vitals.load_vitals(conn, user))[table]
         if table == 'genetic_findings':
             return genetics.load_genetics(conn, user)['findings']
+        if table == 'documents':
+            return clinical_records_for_person(conn, user)['documents']
         return clinical.load_clinical(conn, user)[table]
     if request.method == 'PATCH':
         body = request.get_json(silent=True) if request.is_json else None
