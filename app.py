@@ -11,6 +11,7 @@ from flask import Flask, Response, abort, jsonify, redirect, render_template, re
 from google.cloud import storage as gcs
 from werkzeug.utils import secure_filename
 
+import clinical
 import genetics
 import vitals
 
@@ -62,6 +63,7 @@ def init_db():
     conn.commit()
     vitals.init_schema(conn)
     genetics.init_schema(conn)
+    clinical.init_schema(conn)
 
 
 def hash_password(password: str, salt: bytes | None = None) -> str:
@@ -158,6 +160,13 @@ def vitals_api():
     if not session.get("user"):
         return jsonify({"error": "unauthorized"}), 401
     return jsonify(vitals.load_vitals(get_db(), session["user"]))
+
+
+@app.get("/api/clinical")
+def clinical_api():
+    if not session.get("user"):
+        return jsonify({"error": "unauthorized"}), 401
+    return jsonify(clinical.load_clinical(get_db(), session["user"]))
 
 
 @app.get("/api/genetics")

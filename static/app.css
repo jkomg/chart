@@ -73,6 +73,7 @@
 .reading-table table{width:100%;border-collapse:collapse;font-size:12px}
 .reading-table th{position:sticky;top:0;background:#f1f6f3;color:#7f918d;font:10px 'DM Mono',monospace;letter-spacing:.6px;text-align:left;padding:9px 12px;text-transform:uppercase}
 .reading-table td{border-top:1px solid var(--line);padding:9px 12px;color:var(--ink)}
+.reading-table td:first-child{white-space:nowrap}
 .reading-table .num{text-align:right;font-variant-numeric:tabular-nums}
 .stat-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:6px 0 8px}
 .stat-tile{background:var(--paper);border:1px solid var(--line);border-radius:11px;padding:13px 14px}
@@ -98,3 +99,61 @@ body.viewer-open{overflow:hidden}
 .viewer-sheet canvas{display:block;width:100%;height:100%}
 .viewer-status{color:var(--muted);margin-top:40px;text-align:center}
 @media(max-width:620px){.viewer-original{display:none}.viewer-bar{gap:8px;padding-left:10px;padding-right:10px}}
+
+/* ---------- extracted records ---------- */
+.data-body{display:flex;flex-direction:column;gap:14px}
+.card-title{font:400 19px 'Libre Baskerville',serif;margin:0 0 10px;color:#2d4147}
+.list-note{margin:-10px 0 4px}
+.chip{display:inline-block;font:10px 'DM Mono',monospace;letter-spacing:.5px;padding:4px 7px;border-radius:5px;background:#eef3f0;color:var(--muted);white-space:nowrap}
+.chip.bad{background:#fbe9e4;color:#a8432a}
+.chip.warn{background:#fdf1dc;color:#8a5a00}
+.chip.good{background:#e4f1e5;color:#2f7a3f}
+.chip-row{display:flex;flex-wrap:wrap;gap:8px}
+.source-link{border:0;background:none;padding:6px 0;color:var(--teal);font-size:12px;font-weight:600;text-align:left;white-space:nowrap}
+.condition-list{display:flex;flex-direction:column}
+.condition-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:11px 0;border-top:1px solid var(--line)}
+.condition-row:first-child{border-top:0}
+.timeline-year{margin:18px 0 8px}
+.data-body .timeline{margin-left:61px}
+@media(max-width:850px){.data-body .timeline{margin-left:0}}
+.search-input{flex:1;min-width:200px;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:14px;background:#fff;min-height:44px}
+.search-input:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px #e4f1ec}
+.toggle-button{border:1px solid var(--line);background:#fff;border-radius:10px;padding:0 14px;font-size:13px;font-weight:600;color:var(--muted);min-height:44px}
+.toggle-button.on{background:var(--navy);border-color:var(--navy);color:#fff}
+.filter-row.plain{position:static;margin:0 0 4px;padding:0}
+.record-list{display:flex;flex-direction:column;gap:8px}
+.record-row{display:flex;align-items:flex-start;gap:14px;padding:14px 16px;background:#fff;border:1px solid var(--line);border-radius:12px;text-decoration:none;color:var(--ink)}
+.record-row[hidden]{display:none}
+.record-row:hover{border-color:#c8d8d0}
+.record-copy{flex:1;min-width:0}
+.record-title{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.record-title b{font-size:14px}
+.record-summary{font-size:12px;color:#5f6f6c;margin:6px 0 0;line-height:1.5}
+.record-arrow{color:var(--teal);align-self:center}
+.lab-list{display:flex;flex-direction:column;gap:6px}
+.lab-wrap{background:#fff;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.lab-item{display:grid;grid-template-columns:minmax(0,2fr) 80px minmax(0,1fr) 86px minmax(0,1fr);gap:12px;align-items:center;width:100%;border:0;background:none;padding:12px 16px;text-align:left;color:var(--ink);min-height:56px}
+.lab-item.flagged{box-shadow:inset 3px 0 0 #d9663f}
+.lab-name b{display:block;font-size:14px;font-weight:600}
+.lab-name small{font-size:11px;color:var(--muted)}
+.lab-value{font-weight:600;font-size:14px;font-variant-numeric:tabular-nums}
+.lab-ref{font-size:12px;color:var(--muted)}
+.spark{width:80px;height:24px;overflow:visible}
+.spark path{fill:none;stroke:var(--series-1);stroke-width:1.5}
+.spark circle{fill:var(--series-1)}
+.lab-detail{padding:4px 16px 16px;border-top:1px solid var(--line)}
+.lab-detail .plot{margin-top:14px}
+@media(max-width:700px){.lab-item{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"name value" "spark flag" "ref ref";row-gap:4px}
+.lab-name{grid-area:name}.lab-value{grid-area:value;text-align:right}.spark{grid-area:spark}.lab-flag{grid-area:flag;justify-self:end}.lab-ref{grid-area:ref}}
+.gene-row{display:flex;justify-content:space-between;gap:14px;padding:12px 0;border-top:1px solid var(--line)}
+.gene-main{min-width:0}
+.gene-main b{margin-right:8px}
+.gene-side{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex:none}
+.mono{font:12px 'DM Mono',monospace;color:#5f6f6c;white-space:pre-line}
+.caveat{background:#fdf6e8;border:1px solid #f0dfb8;border-radius:12px;padding:14px 16px;font-size:13px;line-height:1.55;color:#5b4a26}
+.reading-table.tall{max-height:none}
+.reading-table tr.detected td:first-child{box-shadow:inset 3px 0 0 #d9663f}
+
+details.more summary{font-size:12px;color:var(--muted);cursor:pointer;list-style:none;line-height:1.5}
+details.more summary::-webkit-details-marker{display:none}
+details.more[open] summary{display:none}

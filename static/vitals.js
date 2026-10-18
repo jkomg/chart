@@ -7,7 +7,7 @@
   const SVG = 'http://www.w3.org/2000/svg';
   const DAY = 86400000;
   const RANGES = { '1m': 30, '3m': 91, '6m': 182, '1y': 365, all: Infinity };
-  const SOURCES = { apple_health: 'Apple Health', oura: 'Oura', pdf: 'Clinic record', manual: 'Entered by hand' };
+  const SOURCES = { apple_health: 'Apple Health', oura: 'Oura', pdf: 'Clinic record', manual: 'Entered by hand', lab: 'Lab report' };
   const CHARTS = [
     { key: 'blood_pressure', label: 'Blood pressure', unit: 'mmHg', series: ['bp_systolic', 'bp_diastolic'] },
     ...['resting_hr', 'weight', 'hrv_rmssd', 'hrv_sdnn', 'spo2', 'respiratory_rate', 'body_temp', 'temp_deviation', 'vo2max']
@@ -172,7 +172,7 @@
   }
 
   // ---------- line chart ----------
-  function lineChart(container, { lines, unit, decimals, range, start, end }) {
+  function lineChart(container, { lines, unit, decimals, range, rangeLabel, start, end }) {
     container.replaceChildren();
     const signal = freshSignal(container);
     const W = container.clientWidth, H = 210;
@@ -199,7 +199,7 @@
       if (bottom > top) {
         svg.append(svgEl('rect', { x: m.left, y: top, width: W - m.left - m.right, height: bottom - top, class: 'band' }));
         const t = svgEl('text', { x: W - m.right - 4, y: top + 12, class: 'band-label', 'text-anchor': 'end' });
-        t.textContent = `typical ${range[0]}–${range[1]}`;
+        t.textContent = rangeLabel || `typical ${range[0]}–${range[1]}`;
         svg.append(t);
       }
     }
@@ -493,6 +493,9 @@
     wrap.append(button, holder);
     return wrap;
   }
+
+  // Shared with labs.js so every trend chart behaves the same way.
+  window.chartKit = { lineChart, drawWhenSized, tableToggle, el, parse, fmt, fmtDate, SOURCES };
 
   // ---------- boot ----------
   syncFilters();

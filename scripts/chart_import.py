@@ -8,7 +8,7 @@ written until you pass --commit.
   scripts/chart_import.py apple-health Data/mia/export.zip --person mia [--since 2025-01-01]
 
   # Values pulled from a PDF, written as a JSON manifest (format in the repo README)
-  scripts/chart_import.py manifest Data/extracted/2025-03-12_physical.json
+  scripts/chart_import.py manifest Data/extracted/*.json
 
   # 23andMe or AncestryDNA raw data. Only findings are stored; the raw file stays local.
   scripts/chart_import.py genetics Data/mia/genome.txt --person mia
@@ -24,6 +24,7 @@ import argparse
 import csv
 import gzip
 import re
+import shutil
 import json
 import os
 import subprocess
@@ -37,6 +38,7 @@ from xml.etree.ElementTree import iterparse
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import libsql  # noqa: E402
 
+import clinical  # noqa: E402
 import genetics  # noqa: E402
 import vitals  # noqa: E402
 
@@ -126,6 +128,7 @@ def connect(prod: bool):
     conn = libsql.connect(database=url, auth_token=token or "")
     vitals.init_schema(conn)
     genetics.init_schema(conn)
+    clinical.init_schema(conn)
     return conn, url
 
 
@@ -156,31 +159,56 @@ def cmd_apple_health(args):
 
 
 def cmd_manifest(args):
-    path = Path(args.file)
-    data = json.loads(path.read_text())
-    person, doc = data["person"].lower(), data.get("document")
-    readings = []
-    for m in data.get("measurements", []):
-        if m["metric"] not in vitals.METRICS:
-            sys.exit(f"Unknown metric {m['metric']!r}. Known: {', '.join(vitals.METRICS)}")
-        readings.append((m["metric"], m["taken_at"], float(m["value"]), m.get("page"), m.get("note")))
-    periods = [(c["start"], c.get("end"), c.get("page"), c.get("note")) for c in data.get("cycles", [])]
-    print(f"{path.name} → {person}, source {doc or '(no PDF)'}:")
-    for metric, day, value, page, _ in readings:
-        print(f"  {day}  {vitals.METRICS[metric]['label']:<32} {value:g} {vitals.METRICS[metric]['unit']}  (p.{page or '?'})")
-    for start, end, page, _ in periods:
-        print(f"  period {start} → {end or '?'}  (p.{page or '?'})")
+    """Import one or more extraction manifests (scripts/EXTRACTION.md)."""
+    repo = Path(__file__).resolve().parent.parent
+    manifests = []
+    for name in args.files:
+        path = Path(name)
+        data = json.loads(path.read_text())
+        person = data["person"].lower()
+        if not re.fullmatch(r"[a-z0-9_-]+", person):
+            sys.exit(f"{path.name}: bad person {person!r}")
+        if not re.fullmatch(r"[a-z0-9][a-z0-9._-]*\.pdf", data["document"]):
+            sys.exit(f"{path.name}: document must be a lowercase bucket filename ending in .pdf, got {data['document']!r}")
+        for m in data.get("measurements", []):
+            if m["metric"] not in vitals.METRICS:
+                sys.exit(f"{path.name}: unknown metric {m['metric']!r}. Known: {', '.join(vitals.METRICS)}")
+        source = repo / data["source_path"] if data.get("source_path") else None
+        if source and not source.exists():
+            sys.exit(f"{path.name}: source_path not found: {source}")
+        manifests.append((path, person, data, source))
+
+    counts = defaultdict(int)
+    for path, person, data, _ in manifests:
+        n = {k: len(data.get(k, [])) for k in ("labs", "measurements", "events", "diagnoses", "medications", "genetic_findings", "cycles")}
+        for k, v in n.items():
+            counts[k] += v
+        detail = " ".join(f"{k}={v}" for k, v in n.items() if v)
+        print(f"  {data.get('date') or '????-??-??'}  {person:<6} {data['document']:<58} {data.get('kind', ''):<8} {detail}")
+    print(f"\n{len(manifests)} documents · " + " · ".join(f"{v} {k}" for k, v in counts.items() if v))
     if not args.commit:
         print("\nPreview only. Re-run with --commit to write.")
         return
-    if doc and not args.no_upload:
-        pdf = (path.parent / doc) if (path.parent / doc).exists() else Path("Data") / doc
-        bucket = os.environ.get("GCS_BUCKET", "chart-jkomg-docs")
-        subprocess.run(["gcloud", "storage", "cp", str(pdf), f"gs://{bucket}/docs/{person}/{doc}"], check=True)
+
     conn, url = connect(args.prod)
-    vitals.upsert_measurements(conn, ((person, m, d, v, "pdf", doc, p, n) for m, d, v, p, n in readings))
-    vitals.upsert_cycles(conn, ((person, s, e, "pdf", doc, p, n) for s, e, p, n in periods))
-    print(f"\nWrote {len(readings)} readings and {len(periods)} periods to {url}")
+    bucket = os.environ.get("GCS_BUCKET", "chart-jkomg-docs")
+    for path, person, data, source in manifests:
+        doc = data["document"]
+        if source and args.local_docs:
+            target = Path(args.local_docs) / person / doc
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source, target)
+        elif source and not args.no_upload:
+            subprocess.run(["gcloud", "storage", "cp", "--quiet", str(source), f"gs://{bucket}/docs/{person}/{doc}"], check=True,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        clinical.replace_document(conn, person, data)
+        conn.execute("DELETE FROM measurements WHERE person = ? AND doc = ?", (person, doc))
+        vitals.upsert_measurements(conn, ((person, m["metric"], m["taken_at"], float(m["value"]), "pdf", doc, m.get("page"), m.get("note"))
+                                          for m in data.get("measurements", [])))
+        vitals.upsert_cycles(conn, ((person, c["start"], c.get("end"), "pdf", doc, c.get("page"), c.get("note"))
+                                    for c in data.get("cycles", [])))
+        print(f"  imported {doc}")
+    print(f"\nWrote {len(manifests)} documents to {url}")
 
 
 CLINVAR_URL = "https://ftp.ncbi.nlm.nih.gov/pub/clinvar/tab_delimited/variant_summary.txt.gz"
@@ -279,9 +307,10 @@ def main():
     apple.add_argument("--since", help="skip readings before this date (YYYY-MM-DD)")
     apple.set_defaults(func=cmd_apple_health)
 
-    manifest = sub.add_parser("manifest", parents=[common], help="import values extracted from a PDF")
-    manifest.add_argument("file")
+    manifest = sub.add_parser("manifest", parents=[common], help="import extraction manifests (scripts/EXTRACTION.md)")
+    manifest.add_argument("files", nargs="+")
     manifest.add_argument("--no-upload", action="store_true", help="don't upload the PDF to the bucket")
+    manifest.add_argument("--local-docs", help="copy PDFs here (<dir>/<person>/) instead of the bucket, for CHART_LOCAL_DOCS_DIR")
     manifest.set_defaults(func=cmd_manifest)
 
     genes = sub.add_parser("genetics", parents=[common], help="import 23andMe / AncestryDNA raw data (findings only)")
