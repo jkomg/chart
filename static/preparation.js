@@ -78,11 +78,12 @@
     if (modalDirty && !confirm('Discard unsaved record changes?')) event.preventDefault();
     else modalDirty = false;
   });
-  async function refreshRecords() {
+  const recordKeys = row => row.sources?.length ? row.sources.map(source => source._key) : [row._key];
+  async function refreshRecords(message = 'Patient update saved.') {
     modalDirty = false;
     dialog.close();
     const refreshed = await chart.reloadClinical();
-    chart.toast(refreshed ? 'Patient update saved.' : 'Saved. Reload to refresh your records.');
+    chart.toast(refreshed ? message : 'Saved. Reload to refresh your records.');
   }
   function editRecord(table, row) {
     if (chart.mode !== 'owner') return;
@@ -117,13 +118,28 @@
     });
     const actions = el('div', { class: 'editor-actions' }, save, cancel);
     const url = '/api/preparation/entries/' + table + (row ? '/' + encodeURIComponent(row._key) : '');
-    if (row && (row._manual || row._original)) {
-      const reset = el('button', { type: 'button', class: 'text-button' }, row._manual ? 'Remove patient entry' : 'Restore original record');
+    if (row) {
+      const remove = el('button', { type: 'button', class: 'danger-button' }, table === 'lab_results' ? 'Delete result' : 'Delete entry');
+      remove.addEventListener('click', async () => {
+        if (chart.mode !== 'owner') return;
+        if (!confirm('Delete this entry from the chart? You can restore it under Deleted entries in Prepare. Source PDFs are kept.')) return;
+        const controls = [...form.querySelectorAll('button, input, textarea, select')];
+        controls.forEach(control => { control.disabled = true; });
+        try {
+          await write('/api/preparation/entries/' + table, 'PATCH', { keys: recordKeys(row), deleted: true });
+          await refreshRecords('Entry deleted.');
+        } catch (failure) { error.textContent = failure.message; controls.forEach(control => { control.disabled = false; }); }
+      });
+      actions.append(remove);
+    }
+    if (row && !row._manual && row._original) {
+      const reset = el('button', { type: 'button', class: 'text-button' }, 'Restore original record');
       reset.addEventListener('click', async () => {
-        if (!confirm(row._manual ? 'Remove this patient-entered record?' : 'Remove your update and notes, and show the original record?')) return;
-        save.disabled = reset.disabled = true;
+        if (chart.mode !== 'owner' || !confirm('Remove your update and notes, and show the original record?')) return;
+        const controls = [...form.querySelectorAll('button, input, textarea, select')];
+        controls.forEach(control => { control.disabled = true; });
         try { await write(url, 'DELETE'); await refreshRecords(); }
-        catch (failure) { error.textContent = failure.message; save.disabled = reset.disabled = false; }
+        catch (failure) { error.textContent = failure.message; controls.forEach(control => { control.disabled = false; }); }
       });
       actions.append(reset);
     }
@@ -168,6 +184,44 @@
     return container;
   };
   window.addEventListener('beforeunload', event => { if (chart.hasUnsavedPreparation()) { event.preventDefault(); event.returnValue = ''; } });
-  chart.preparation = { decorate, addButton };
+  const renderDeleted = data => {
+    const sections = { diagnoses: 'history', allergies: 'history', events: 'history', medications: 'medications', family_history: 'family', lab_results: 'labs' };
+    const panels = new Map();
+    for (const id of new Set(Object.values(sections))) {
+      const previous = document.querySelector(`#${id} .deleted-entries`);
+      panels.set(id, { open: previous?.open || false, rows: [] });
+      previous?.remove();
+    }
+    for (const [table, rows] of Object.entries(data.deleted_entries || {})) {
+      if (!sections[table]) continue;
+      const entries = ['diagnoses', 'medications'].includes(table) ? chart.groupClinicalByName(rows) : rows;
+      for (const row of entries) panels.get(sections[table]).rows.push({ table, row });
+    }
+    for (const [id, { open, rows }] of panels) {
+      if (!rows.length) continue;
+      const list = el('div', { class: 'deleted-list' });
+      const panel = el('details', { class: 'deleted-entries owner-only' }, el('summary', {}, `Deleted entries (${rows.length})`), list);
+      panel.open = open;
+      for (const { table, row } of rows) {
+        const restore = el('button', { type: 'button', class: 'outline-button compact' }, 'Restore entry');
+        const error = el('p', { class: 'save-status', role: 'alert' });
+        const title = row.name || row.substance || row.title || row.test || [row.relation, row.condition].filter(Boolean).join(' · ');
+        const dates = [row.date || row.taken_at, row._manual ? 'Patient-entered' : 'Source record', recordKeys(row).length > 1 ? `${recordKeys(row).length} records` : null].filter(Boolean).join(' · ');
+        const entry = el('article', { class: 'deleted-entry' }, el('div', {}, el('b', {}, title), el('p', { class: 'vital-meta' }, dates)), restore, error);
+        restore.addEventListener('click', async () => {
+          if (chart.mode !== 'owner') return;
+          restore.disabled = true;
+          try {
+            await write('/api/preparation/entries/' + table, 'PATCH', { keys: recordKeys(row), deleted: false });
+            const refreshed = await chart.reloadClinical();
+            chart.toast(refreshed ? 'Entry restored.' : 'Restored. Reload to refresh your records.');
+          } catch (failure) { error.textContent = failure.message; restore.disabled = false; }
+        });
+        list.append(entry);
+      }
+      document.getElementById(id).append(panel);
+    }
+  };
+  chart.preparation = { decorate, addButton, renderDeleted };
   document.addEventListener('chart:mode', () => { if (chart.mode === 'provider') { dialog.close(); modalDirty = false; } });
 })();

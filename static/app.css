@@ -221,3 +221,9 @@ body[data-mode=provider] .preparation-section:not(.has-content){display:none}
 .record-editor{width:min(600px,calc(100vw - 32px));max-height:calc(100dvh - 40px);overflow:auto;border:1px solid var(--line);border-radius:14px;padding:24px;color:var(--ink)}
 .record-editor::backdrop{background:rgba(25,40,45,.5)}
 button:disabled{cursor:wait;opacity:.55}
+
+.danger-button{border:1px solid #b95d4e;border-radius:8px;background:white;color:#9b3026;font-weight:600;min-height:44px;padding:10px 14px}
+.deleted-entries{margin-top:24px;padding:16px 20px;border:1px solid var(--line);border-radius:12px;background:white}
+.deleted-entries>summary{cursor:pointer;font-weight:600;color:var(--muted);min-height:44px;padding:12px 0}
+.deleted-entry{display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;align-items:center;padding:14px 0;border-top:1px solid var(--line)}
+.deleted-entry>.save-status{flex-basis:100%}

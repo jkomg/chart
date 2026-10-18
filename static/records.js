@@ -138,6 +138,7 @@
     docsByName = Object.fromEntries(data.documents.map(d => [d.document, d]));
     chart.clinicalUI.setDocuments(data.documents);
     chart.renderHistory(data); renderFamily(); renderMedications(); renderDocuments(); chart.renderLabs(data); renderGenetics();
+    chart.preparation.renderDeleted(data);
     return true;
   }
   chart.reloadClinical = load;
