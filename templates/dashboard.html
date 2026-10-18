@@ -5,37 +5,38 @@
   <title>Chart — private medical record</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
 </head>
-<body>
+<body data-mode="provider" data-account="{{ current_user }}">
   <div class="app-shell">
     <aside class="sidebar">
-      <div class="brand"><div class="brand-mark small">✦</div><div><strong>chart</strong><span>private health record</span></div></div>
+      <div class="brand"><div class="brand-mark small">✦</div><div><strong>chart</strong><span>{{ current_user|capitalize }}’s record</span></div></div>
       <div class="people-pill"><span class="avatar">{{ current_user[:2]|upper }}</span><span><b>{{ current_user|capitalize }}</b><small>Private account</small></span><span class="chevron">⌄</span></div>
+      <div class="mode-switch" role="group" aria-label="View mode"><button type="button" data-mode="provider" aria-pressed="true">Provider</button><button type="button" data-mode="owner" aria-pressed="false">Prepare</button></div>
       <nav class="nav" aria-label="Primary">
         <p class="nav-label">Workspace</p>
-        <button class="nav-item active" data-tab="goals"><span class="nav-icon">◎</span>Goals{% if records.goals["items"] %} <em>{{ records.goals["items"]|length }}</em>{% endif %}</button>
+        <button class="nav-item active" data-tab="goals"><span class="nav-icon">◎</span>Visit priorities{% if records.goals["items"] %} <em>{{ records.goals["items"]|length }}</em>{% endif %}</button>
         <button class="nav-item" data-tab="history"><span class="nav-icon">◌</span>Medical history</button>
-        <button class="nav-item" data-tab="family"><span class="nav-icon">♧</span>Family history</button>
-        <button class="nav-item" data-tab="vitals"><span class="nav-icon">♡</span>Vitals</button>
+        <button class="nav-item" data-tab="medications"><span class="nav-icon">＋</span>Medications</button>
         <button class="nav-item" data-tab="labs"><span class="nav-icon">⌁</span>Labs</button>
+        <button class="nav-item" data-tab="vitals"><span class="nav-icon">♡</span>Vitals</button>
+        <button class="nav-item" data-tab="family"><span class="nav-icon">♧</span>Family history</button>
         <button class="nav-item" data-tab="genetics"><span class="nav-icon">⧬</span>Genetics</button>
         <button class="nav-item" data-tab="documents"><span class="nav-icon">▤</span>Medical records <em>{{ docs|length }}</em></button>
-        <button class="nav-item" data-tab="medications"><span class="nav-icon">＋</span>Medications</button>
-        <button class="nav-item" data-tab="synopsis"><span class="nav-icon">✧</span>Synopsis</button>
       </nav>
       <div class="sidebar-bottom"><div class="sync-status"><span></span><div><b>Private workspace</b><small>Encrypted in transit</small></div></div><form method="post" action="{{ url_for('logout') }}"><button class="logout-button">Sign out <span>↗</span></button></form></div>
     </aside>
     <main class="main-content">
-      <header class="topbar"><div class="breadcrumb" data-root="{{ current_user|upper }}">{{ current_user|upper }} <span>/</span> <b>GOALS</b></div><div class="top-actions"><button class="icon-button" title="Search">⌕</button><button class="icon-button" title="Notifications">♧<i></i></button><div class="profile-avatar">{{ current_user[:2]|upper }}</div></div></header>
+      <header class="topbar"><div class="breadcrumb" data-root="{{ current_user|upper }}">{{ current_user|upper }} <span>/</span> <b>VISIT PRIORITIES</b></div><div class="view-label">{{ current_user|capitalize }} · <span id="view-label">Provider view</span></div></header>
       <div class="content-wrap">
         <section class="tab-panel active" id="goals">
-          <div class="page-heading"><div><h1>Goals</h1><p class="subtitle">What we're working toward, and what to ask at the next visit.</p></div></div>
-          <div class="goal-list" data-key="items" data-label="goal" data-empty="No goals yet."></div>
-          <div class="section-row"><h2 class="section-title">Questions for the next visit</h2></div>
-          <div class="goal-list" data-key="questions" data-label="question" data-empty="No questions yet."></div>
+          <div class="page-heading"><div><h1>Visit priorities</h1><p class="subtitle">What matters most for this appointment.</p></div></div>
+          <p class="owner-only preparation-note">The first six goals appear as visit priorities. Use the arrows to order them or move a goal into the top six.</p>
+          <div class="goal-list" data-key="items" data-label="goal" data-empty="No visit priorities added yet."></div>
+          <div class="section-row"><h2 class="section-title">Questions for this visit</h2></div>
+          <div class="goal-list" data-key="questions" data-label="question" data-empty="No questions added yet."></div>
           <script type="application/json" id="goals-data">{{ records.goals|tojson }}</script>
         </section>
-        <section class="tab-panel" id="history"><div class="page-heading"><div><p class="eyebrow">THE LONG VIEW</p><h1>Medical history</h1><p class="subtitle">A human-readable timeline, with source records nearby.</p></div><button class="outline-button" data-toast="History entry added to your draft.negative">＋ Add event</button></div><div class="timeline">{% for item in records.history %}<article class="timeline-item"><div class="timeline-date">{{ item.date }}</div><div class="timeline-dot"></div><div class="timeline-card"><span class="status-chip">DOCUMENTED</span><h2>{{ item.title }}</h2><p>{{ item.detail }}</p><button class="text-button" data-tab="documents">View source →</button></div></article>{% endfor %}</div></section>
-        <section class="tab-panel" id="family"><div class="page-heading"><div><p class="eyebrow">PATTERNS & CONTEXT</p><h1>Family history</h1><p class="subtitle">Details worth remembering across generations.</p></div><button class="outline-button" data-toast="Family history entry added to your draft.">＋ Add relation</button></div><div class="family-grid">{% for item in records.family_history %}<article class="family-card"><div class="family-icon">♧</div><p class="eyebrow">{{ item.relation }}</p><h2>{{ item.detail }}</h2><button class="text-button">Edit entry →</button></article>{% endfor %}</div></section>
+        <section class="tab-panel" id="history"><div class="page-heading"><div><h1>Medical history</h1><p class="subtitle">Conditions, allergies, procedures, and past visits.</p></div></div><div class="data-body" aria-live="polite"><p>Loading medical history…</p></div></section>
+        <section class="tab-panel" id="family"><div class="page-heading"><div><h1>Family history</h1></div></div><div class="data-body"><p>Loading family history…</p></div></section>
         <section class="tab-panel" id="vitals">
           <div class="page-heading"><div><p class="eyebrow">TRENDS OVER TIME</p><h1>Vitals</h1><p class="subtitle">Tap any point to see the exact reading and where it came from.</p></div></div>
           <div class="filter-row">
@@ -43,11 +44,10 @@
           </div>
           <div class="vitals-body" aria-live="polite"></div>
         </section>
-        <section class="tab-panel" id="labs"><div class="page-heading"><div><p class="eyebrow">MEASUREMENTS OVER TIME</p><h1>Labs</h1><p class="subtitle">A readable history of results, not just a pile of PDFs.</p></div><button class="outline-button" data-toast="Lab entry added to your draft.">＋ Add result</button></div><div class="labs-card"><div class="table-head"><span>DATE</span><span>TEST</span><span>RESULT</span><span>REFERENCE</span><span>STATUS</span></div>{% for item in records.labs %}<div class="lab-row"><span>{{ item.date }}</span><b>{{ item.name }}</b><strong>{{ item.value }}</strong><span>{{ item.range }}</span><span class="lab-status">{{ item.status }}</span></div>{% endfor %}</div></section>
+        <section class="tab-panel" id="labs"><div class="page-heading"><div><h1>Labs</h1><p class="subtitle">Common labs first. Search all tests or expand a category.</p></div></div><div class="data-body" aria-live="polite"><p>Loading lab results…</p></div></section>
         <section class="tab-panel" id="genetics"><div class="page-heading"><div><p class="eyebrow">INHERITED FACTORS</p><h1>Genetics</h1><p class="subtitle">Clinical genetic tests first, then consumer DNA data, each linked to its report.</p></div></div><div class="empty-card"><div class="empty-icon">⧬</div><h2>No genetic results yet.</h2><p>Clinical genetic reports and consumer DNA data appear here once imported.</p></div></section>
-        <section class="tab-panel" id="documents"><div class="page-heading"><div><p class="eyebrow">SOURCE OF TRUTH</p><h1>Medical records</h1><p class="subtitle">Your original PDFs, kept alongside the notes that explain them.</p></div><form method="post" action="{{ url_for('upload_document') }}" enctype="multipart/form-data"><label class="outline-button file-button">↑ Upload PDF<input type="file" name="file" accept="application/pdf" onchange="this.form.submit()"></label></form></div><div class="upload-banner"><div class="upload-icon">↑</div><div><h3>Drop in a record when you’re ready</h3><p>PDFs will be stored in the private chart volume and linked from the relevant section.</p></div><label class="primary-button compact file-button">Choose files<input type="file" name="file" accept="application/pdf" form="upload-form" onchange="document.getElementById('upload-form').submit()"></label></div><div class="document-grid">{% if docs %}{% for doc in docs %}<a class="document-card" href="#doc/{{ doc.filename|urlencode }}"><div class="pdf-icon">PDF</div><div><h3>{{ doc.name }}</h3><p>{{ doc.size }} KB · source document</p></div><span>→</span></a>{% endfor %}{% else %}<div class="empty-card"><div class="empty-icon">▤</div><h2>Your source records will live here.</h2><p>Add PDFs to the chart data volume and they’ll appear as private, clickable records.</p></div>{% endif %}</div><form id="upload-form" method="post" action="{{ url_for('upload_document') }}" enctype="multipart/form-data" hidden></form></section>
-        <section class="tab-panel" id="medications"><div class="page-heading"><div><p class="eyebrow">CURRENT REGIMEN</p><h1>Medications</h1><p class="subtitle">A single list for prescriptions, over-the-counter medicines, and supplements.</p></div><button class="outline-button" data-toast="Medication added to your draft.">＋ Add medication</button></div><div class="medication-list">{% for item in records.medications %}<article class="medication-row"><div class="med-icon">＋</div><div class="med-copy"><h2>{{ item.name }}</h2><p>{{ item.dose }} <span>·</span> {{ item.schedule }}</p></div><span class="current-tag">{{ item.status }}</span><button class="more-button">···</button></article>{% endfor %}</div></section>
-        <section class="tab-panel" id="synopsis"><div class="page-heading"><div><p class="eyebrow">CLINICIAN-FRIENDLY SUMMARY</p><h1>Synopsis</h1><p class="subtitle">The one-page version of what matters most right now.</p></div><button class="outline-button" data-toast="Synopsis editing will be enabled when records are connected.">✎ Edit synopsis</button></div><article class="synopsis-card"><div class="synopsis-header"><span class="status-chip">WORKING DRAFT</span><span>Last reviewed · Starter workspace</span></div><p class="synopsis-text">{{ records.synopsis }}</p><div class="synopsis-columns"><div><p class="eyebrow">INCLUDE NEXT</p><p>Diagnoses · recent changes · questions · care team</p></div><div><p class="eyebrow">REMEMBER</p><p>Verify every summary against the underlying record before sharing.</p></div></div></article><div class="disclaimer">Chart helps organize information. It does not diagnose, interpret results, or replace a medical professional.</div></section>
+        <section class="tab-panel" id="documents"><div class="page-heading"><div><p class="eyebrow">SOURCE OF TRUTH</p><h1>Medical records</h1><p class="subtitle">Your original PDFs, kept alongside the notes that explain them.</p></div><form class="owner-only" method="post" action="{{ url_for('upload_document') }}" enctype="multipart/form-data"><label class="outline-button file-button">↑ Upload PDF<input type="file" name="file" accept="application/pdf" onchange="this.form.submit()"></label></form></div><div class="upload-banner owner-only"><div class="upload-icon">↑</div><div><h3>Drop in a record when you’re ready</h3><p>Upload a PDF to this account’s private source records.</p></div><label class="primary-button compact file-button">Choose files<input type="file" name="file" accept="application/pdf" form="upload-form" onchange="document.getElementById('upload-form').submit()"></label></div><div class="document-grid">{% if docs %}{% for doc in docs %}<a class="document-card" href="#doc/{{ doc.filename|urlencode }}"><div class="pdf-icon">PDF</div><div><h3>{{ doc.name }}</h3><p>{{ doc.size }} KB · source document</p></div><span>→</span></a>{% endfor %}{% else %}<div class="empty-card"><div class="empty-icon">▤</div><h2>Your source records will live here.</h2><p>Add PDFs to the chart data volume and they’ll appear as private, clickable records.</p></div>{% endif %}</div><form id="upload-form" method="post" action="{{ url_for('upload_document') }}" enctype="multipart/form-data" hidden></form></section>
+        <section class="tab-panel" id="medications"><div class="page-heading"><div><h1>Medications</h1><p class="subtitle">Medications as documented, with dates and sources.</p></div></div><div class="data-body"><p>Loading medications…</p></div></section>
       </div>
     </main>
   </div>
@@ -62,6 +62,9 @@
   </div>
   <script src="{{ url_for('static', filename='app.js') }}"></script>
   <script src="{{ url_for('static', filename='vitals.js') }}"></script>
+  <script src="{{ url_for('static', filename='clinical-ui.js') }}"></script>
+  <script src="{{ url_for('static', filename='history.js') }}"></script>
+  <script src="{{ url_for('static', filename='labs.js') }}"></script>
   <script src="{{ url_for('static', filename='records.js') }}"></script>
   <script src="{{ url_for('static', filename='goals.js') }}"></script>
   <script type="module" src="{{ url_for('static', filename='viewer.js') }}"></script>
