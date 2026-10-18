@@ -23,6 +23,6 @@ jobs:
       - uses: docker/build-push-action@v6
         with:
           context: .
-          platforms: linux/arm64,linux/amd64
+          platforms: linux/amd64  # libsql has no linux/arm64 wheel; k0s stays pinned to an older arm64 build
           push: true
           tags: ghcr.io/jkomg/chart:latest

@@ -4,7 +4,7 @@ import json
 import os
 import secrets
 
-import libsql_experimental as libsql
+import libsql
 from flask import Flask, abort, jsonify, redirect, render_template, request, session, url_for
 from google.cloud import storage as gcs
 from werkzeug.utils import secure_filename
