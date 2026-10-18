@@ -14,8 +14,7 @@ DATA_DIR = Path(os.environ.get("CHART_DATA_DIR", BASE_DIR / "data"))
 DOCS_DIR = DATA_DIR / "docs"
 DATA_FILE = DATA_DIR / "medical.json"
 SESSION_SECRET = os.environ.get("CHART_SESSION_SECRET", "change-this-before-deploying")
-USERNAME = os.environ.get("CHART_USERNAME", "family")
-PASSWORD_HASH = os.environ.get("CHART_PASSWORD_HASH", "")
+USERS: dict[str, str] = json.loads(os.environ.get("CHART_USERS", "{}"))  # {"username": "password_hash", ...}
 
 app = Flask(__name__)
 app.secret_key = SESSION_SECRET
@@ -64,7 +63,8 @@ def require_login():
 
 @app.context_processor
 def inject_context():
-    return {"logged_in": bool(session.get("user"))}
+    user = session.get("user", "")
+    return {"logged_in": bool(user), "current_user": user}
 
 
 @app.get("/login")
@@ -76,13 +76,14 @@ def login():
 
 @app.post("/login")
 def login_post():
-    username = request.form.get("username", "")
+    username = request.form.get("username", "").lower().strip()
     password = request.form.get("password", "")
-    if hmac.compare_digest(username, USERNAME) and PASSWORD_HASH and check_password(password, PASSWORD_HASH):
+    stored_hash = USERS.get(username, "")
+    if stored_hash and check_password(password, stored_hash):
         session.clear()
         session["user"] = username
         return redirect(request.args.get("next") or url_for("dashboard"))
-    return render_template("login.html", error="That login did not match. Check the shared account details and try again."), 401
+    return render_template("login.html", error="That login did not match. Check your username and password and try again."), 401
 
 
 @app.post("/logout")

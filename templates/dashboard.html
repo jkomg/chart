@@ -9,7 +9,7 @@
   <div class="app-shell">
     <aside class="sidebar">
       <div class="brand"><div class="brand-mark small">✦</div><div><strong>chart</strong><span>shared health record</span></div></div>
-      <div class="people-pill"><span class="avatar">JK</span><span><b>Our household</b><small>{{ records.people|join(' · ') }}</small></span><span class="chevron">⌄</span></div>
+      <div class="people-pill"><span class="avatar">{{ current_user[:2]|upper }}</span><span><b>{{ current_user|capitalize }}</b><small>{{ records.people|join(' · ') }}</small></span><span class="chevron">⌄</span></div>
       <nav class="nav" aria-label="Primary">
         <p class="nav-label">Workspace</p>
         <button class="nav-item active" data-tab="goals"><span class="nav-icon">◎</span>Goals <em>3</em></button>
@@ -23,7 +23,7 @@
       <div class="sidebar-bottom"><div class="sync-status"><span></span><div><b>Private workspace</b><small>Encrypted in transit</small></div></div><form method="post" action="{{ url_for('logout') }}"><button class="logout-button">Sign out <span>↗</span></button></form></div>
     </aside>
     <main class="main-content">
-      <header class="topbar"><div class="breadcrumb">OUR HOUSEHOLD <span>/</span> <b>GOALS</b></div><div class="top-actions"><button class="icon-button" title="Search">⌕</button><button class="icon-button" title="Notifications">♧<i></i></button><div class="profile-avatar">JK</div></div></header>
+      <header class="topbar"><div class="breadcrumb">OUR HOUSEHOLD <span>/</span> <b>GOALS</b></div><div class="top-actions"><button class="icon-button" title="Search">⌕</button><button class="icon-button" title="Notifications">♧<i></i></button><div class="profile-avatar">{{ current_user[:2]|upper }}</div></div></header>
       <div class="content-wrap">
         <section class="tab-panel active" id="goals">
           <div class="page-heading"><div><p class="eyebrow">OUR NORTH STAR</p><h1>Goals</h1><p class="subtitle">The context we want close at hand before every visit.</p></div><button class="outline-button" data-toast="Editing will be enabled when records are connected.">＋ Add note</button></div>
