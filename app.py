@@ -227,7 +227,7 @@ def preparation_entry(table, key=None):
     updates = preparation.load(conn, user)
     manual = key is None or key.startswith(table + ':manual:')
     if key is not None:
-        exists = key in updates if manual else any(preparation.key_for(table, row) == key for row in clinical.load_clinical(conn, user)[table])
+        exists = key in updates if manual else any(source_key == key for source_key, _ in preparation.source_rows(table, clinical.load_clinical(conn, user)[table]))
         if not exists or not key.startswith(table + ':'):
             return jsonify({'error': 'Record not found'}), 404
     if request.method == 'DELETE':

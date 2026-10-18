@@ -27,9 +27,7 @@
 
   // ---------- medications ----------
   function renderMedications() {
-    const latest = new Map();
-    for (const m of [...data.medications].sort((a, b) => (a.date || '').localeCompare(b.date || ''))) latest.set(m.name.toLowerCase(), m);
-    const rows = [...latest.values()].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    const rows = chart.groupClinicalByName(data.medications).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
     const list = el('div', { class: 'medication-list' });
     for (const row of rows) {
       const copy = el('div', { class: 'med-copy' }, el('h2', {}, row.name), el('p', {}, [row.dose, row.schedule].filter(Boolean).join(' · ') || '—'),

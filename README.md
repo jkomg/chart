@@ -97,7 +97,7 @@ records; they do not establish what is current today.
 
 Frontend modules: `clinical-ui.js` provides shared source links and accordions;
 `labs.js` and `history.js` render those sections; `records.js` loads clinical data
-and renders the remaining record views. No build step or new dependencies are needed.
+and renders the remaining record views. No frontend build step or new runtime dependencies are needed.
 
 Prepare also provides an editable summary and Notes subsection for every tab. Saved
 text appears in Provider view with a patient-provided label. Conditions, allergies,
@@ -109,5 +109,11 @@ lab values remain as recorded.
 
 These edits live in the account-scoped `preparation` table, independently of imports
 and goal ordering. Re-importing an unchanged source preserves its updates. Record
-identity uses the source document/page, date, and identifying labels; a changed source
-identity requires reviewing and reapplying any prior patient update.
+identity uses all stored source fields plus an occurrence number for exact duplicates.
+Changed source content requires reviewing and reapplying any prior patient update.
+Patient-entered conditions and medications remain separate from imported summaries,
+including when names match and no date is provided.
+
+Frontend rendering regressions run with `npm ci` then `npm test` (Node 22 in CI).
+The DOM library is a development-only dependency; serving the app still needs no
+JavaScript build step or Node runtime.

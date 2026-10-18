@@ -21,7 +21,7 @@
     let holder = section.querySelector('.data-body');
     if (!holder) {
       holder = el('div', { class: 'data-body' });
-      [...section.children].filter(c => !c.classList.contains('page-heading') && !c.classList.contains('filter-row') && c.tagName !== 'FORM').forEach(c => c.remove());
+      [...section.children].filter(c => !c.classList.contains('page-heading') && !c.classList.contains('filter-row') && !c.classList.contains('preparation-section') && c.tagName !== 'FORM').forEach(c => c.remove());
       section.append(holder);
     }
     holder.replaceChildren(...kids);

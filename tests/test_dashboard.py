@@ -26,7 +26,7 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         html = response.get_data(as_text=True)
         self.assertIn('data-mode="provider"', html)
-        for module in ['clinical-ui.js', 'preparation.js', 'labs.js', 'history.js', 'goals.js']:
+        for module in ['clinical-ui.js', 'record-groups.js', 'preparation.js', 'labs.js', 'history.js', 'goals.js']:
             self.assertIn(module, html)
             with self.client.get('/static/' + module) as asset:
                 self.assertEqual(asset.status_code, 200)
@@ -126,6 +126,29 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(self.client.put(url, json={'fields': {'value': '95'}, 'notes': ''}).status_code, 400)
         self.assertEqual(self.client.put(url, json={'fields': {}, 'notes': 'Sample lab note'}).status_code, 200)
         self.assertEqual(self.client.get('/api/clinical').json['lab_results'][0]['value'], 90)
+
+    def test_duplicate_source_results_have_independent_stable_notes(self):
+        common = {'test': 'Glucose', 'taken_at': '2025-01-01', 'page': 2, 'value': 90, 'test_reported': 'Glucose A', 'panel': 'Panel A'}
+        manifest = {'document': 'sample.pdf', 'labs': [common, {**common, 'value': 95}, {**common, 'panel': 'Panel B'}, {**common, 'test_reported': 'Glucose B'}, dict(common)]}
+        app.clinical.replace_document(app.get_db(), 'sample-a', manifest)
+        rows = self.client.get('/api/clinical').json['lab_results']
+        keys = [row['_key'] for row in rows]
+        self.assertEqual(len(set(keys)), 5)
+        for index, key in enumerate(keys):
+            url = '/api/preparation/entries/lab_results/' + key
+            self.assertEqual(self.client.put(url, json={'fields': {}, 'notes': f'Note for result {index}'}).status_code, 200)
+        annotated = self.client.get('/api/clinical').json['lab_results']
+        self.assertEqual([row['_patient_note'] for row in annotated], [f'Note for result {i}' for i in range(5)])
+        app.clinical.replace_document(app.get_db(), 'sample-a', manifest)
+        reimported = self.client.get('/api/clinical').json['lab_results']
+        self.assertEqual([row['_key'] for row in reimported], keys)
+        self.assertEqual([row['_patient_note'] for row in reimported], [f'Note for result {i}' for i in range(5)])
+        # The exact duplicate's second occurrence is independently removable too.
+        self.assertEqual(self.client.delete('/api/preparation/entries/lab_results/' + keys[-1]).status_code, 200)
+        remaining = self.client.get('/api/clinical').json['lab_results']
+        self.assertEqual(remaining[0]['_patient_note'], 'Note for result 0')
+        self.assertNotIn('_patient_note', remaining[-1])
+
 
 
 if __name__ == '__main__':

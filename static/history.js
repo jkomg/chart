@@ -9,16 +9,7 @@
     const status = el('p', { class: 'search-status', role: 'status' });
     const openSections = new Set(['Allergies', 'Active conditions', 'Conditions · status unconfirmed']);
     const matches = row => Object.values(row).filter(v => typeof v === 'string').join(' ').toLowerCase().includes(search.value.trim().toLowerCase());
-    const groupConditions = rows => {
-      const grouped = new Map();
-      for (const row of [...rows].sort((a, b) => (a.date || '').localeCompare(b.date || ''))) {
-        const key = row.name.toLowerCase();
-        const existing = grouped.get(key);
-        grouped.set(key, { ...row, sources: [...(existing?.sources || []), ...(row.document ? [row] : [])] });
-      }
-      return [...grouped.values()];
-    };
-    const allConditions = groupConditions(diagnoses);
+    const allConditions = chart.groupClinicalByName(diagnoses);
     const buckets = [
       ['Allergies', allergies, 'allergy'],
       ['Active conditions', allConditions.filter(d => /^active$/i.test(d.status || '')), 'condition'],

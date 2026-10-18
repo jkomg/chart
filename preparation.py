@@ -29,15 +29,29 @@ def save(conn, person, key, data):
     conn.commit()
 
 
-def key_for(table, row):
-    identity = {k: row.get(k) for k in ('document', 'page', 'name', 'substance', 'title', 'relation', 'condition', 'test', 'date', 'taken_at') if k in row}
-    return table + ':' + hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
+def key_for(table, row, occurrence=0):
+    # Use stored source fields, excluding derived flags and patient overlays. Exact
+    # duplicate rows get distinct occurrence numbers in their source query order.
+    identity = {column: row.get(column) for column in data_columns(table)}
+    if table == 'lab_results' and row.get('flag_calculated'):
+        identity['flag'] = None
+    payload = {'source': identity, 'occurrence': occurrence}
+    return table + ':' + hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
+
+
+def source_rows(table, rows):
+    occurrences = {}
+    for row in rows:
+        fingerprint = key_for(table, row)
+        occurrence = occurrences.get(fingerprint, 0)
+        occurrences[fingerprint] = occurrence + 1
+        yield key_for(table, row, occurrence), row
 
 
 def apply(data, updates):
     for table in FIELDS:
-        for row in data[table]:
-            row['_key'] = key_for(table, row)
+        for key, row in source_rows(table, data[table]):
+            row['_key'] = key
             update = updates.get(row['_key'])
             if update:
                 row['_original'] = {k: row.get(k) for k in FIELDS[table]}
