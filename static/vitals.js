@@ -1,10 +1,9 @@
-// Vitals: one small chart per metric (never two scales on one plot), a shared person + range
+// Vitals: one small chart per metric (never two scales on one plot), a shared range
 // filter, tap/hover readouts that link back to the source PDF, and a table twin for each chart.
 (() => {
   const section = document.getElementById('vitals');
   if (!section) return;
   const body = section.querySelector('.vitals-body');
-  const people = section.dataset.people.split(',').filter(Boolean);
   const SVG = 'http://www.w3.org/2000/svg';
   const DAY = 86400000;
   const RANGES = { '1m': 30, '3m': 91, '6m': 182, '1y': 365, all: Infinity };
@@ -14,8 +13,8 @@
     ...['resting_hr', 'weight', 'hrv_rmssd', 'hrv_sdnn', 'spo2', 'respiratory_rate', 'body_temp', 'temp_deviation', 'vo2max']
       .map(key => ({ key, series: [key] })),
   ];
-  const state = { person: people.includes(chart.query?.get('person')) ? chart.query.get('person') : people[people.length - 1] || people[0],
-                  range: RANGES[chart.query?.get('range')] ? chart.query.get('range') : '6m', data: {}, loaded: false };
+  // The server returns only the signed-in account's data; there is no way to ask for anyone else's.
+  const state = { range: RANGES[chart.query?.get('range')] ? chart.query.get('range') : '6m', data: null, loaded: false };
 
   const el = (tag, attrs = {}, ...kids) => {
     const node = document.createElement(tag);
@@ -39,7 +38,7 @@
       const button = e.target.closest('button');
       if (!button) return;
       state[group.dataset.filter] = button.dataset.value;
-      chart.replaceQuery({ person: state.person, range: state.range });
+      chart.replaceQuery({ range: state.range });
       syncFilters();
       load();
     });
@@ -53,12 +52,12 @@
   }
 
   async function load() {
-    if (!state.data[state.person]) {
+    if (!state.data) {
       body.classList.add('refreshing');  // hold the previous render, dimmed, while fetching
       try {
-        const res = await fetch(`/api/vitals?person=${encodeURIComponent(state.person)}`, { credentials: 'same-origin' });
+        const res = await fetch('/api/vitals', { credentials: 'same-origin' });
         if (res.status === 401) { location.href = '/login'; return; }
-        state.data[state.person] = await res.json();
+        state.data = await res.json();
       } catch {
         body.classList.remove('refreshing');
         chart.toast('Couldn’t load vitals. Check the connection and try again.');
@@ -71,7 +70,7 @@
 
   // ---------- page ----------
   function render() {
-    const data = state.data[state.person];
+    const data = state.data;
     const end = new Date();
     const start = state.range === 'all' ? null : new Date(end - RANGES[state.range] * DAY);
     body.replaceChildren();
@@ -84,9 +83,8 @@
       if (series.length) cards.push(metricCard(spec, series, start, end));
     }
     if (!cards.length) {
-      const name = state.person[0].toUpperCase() + state.person.slice(1);
       body.append(el('div', { class: 'empty-card' }, el('div', { class: 'empty-icon' }, '♡'),
-        el('h2', {}, `No vitals for ${name} yet.`),
+        el('h2', {}, 'No vitals yet.'),
         el('p', {}, 'Readings appear here once Apple Health, Oura, or clinic records are imported.')));
       return;
     }

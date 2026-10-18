@@ -7,28 +7,37 @@ written until you pass --commit.
   # Apple Health: iPhone Health app > profile > Export All Health Data > export.zip
   scripts/chart_import.py apple-health Data/mia/export.zip --person mia [--since 2025-01-01]
 
-  # Values pulled from a PDF, written as a JSON manifest (see Data/README in the repo README)
+  # Values pulled from a PDF, written as a JSON manifest (format in the repo README)
   scripts/chart_import.py manifest Data/extracted/2025-03-12_physical.json
 
+  # 23andMe or AncestryDNA raw data. Only findings are stored; the raw file stays local.
+  scripts/chart_import.py genetics Data/mia/genome.txt --person mia
+
+Each person's data is visible only to the account with the same username.
+
 Target database: TURSO_DATABASE_URL / TURSO_AUTH_TOKEN from the environment, or --prod to use
-the `chart` database via the turso CLI. Manifest PDFs upload to gs://$GCS_BUCKET (default
-chart-jkomg-docs) with the gcloud CLI.
+the `chart` database via the turso CLI. Manifest PDFs upload to gs://$GCS_BUCKET/docs/<person>/
+(default bucket chart-jkomg-docs) with the gcloud CLI.
 """
 
 import argparse
+import csv
+import gzip
+import re
 import json
 import os
 import subprocess
 import sys
 import zipfile
 from collections import defaultdict
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from xml.etree.ElementTree import iterparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import libsql  # noqa: E402
 
+import genetics  # noqa: E402
 import vitals  # noqa: E402
 
 APPLE_QUANTITIES = {
@@ -116,6 +125,7 @@ def connect(prod: bool):
         sys.exit("Set TURSO_DATABASE_URL (and TURSO_AUTH_TOKEN), or pass --prod.")
     conn = libsql.connect(database=url, auth_token=token or "")
     vitals.init_schema(conn)
+    genetics.init_schema(conn)
     return conn, url
 
 
@@ -166,11 +176,94 @@ def cmd_manifest(args):
     if doc and not args.no_upload:
         pdf = (path.parent / doc) if (path.parent / doc).exists() else Path("Data") / doc
         bucket = os.environ.get("GCS_BUCKET", "chart-jkomg-docs")
-        subprocess.run(["gcloud", "storage", "cp", str(pdf), f"gs://{bucket}/docs/{doc}"], check=True)
+        subprocess.run(["gcloud", "storage", "cp", str(pdf), f"gs://{bucket}/docs/{person}/{doc}"], check=True)
     conn, url = connect(args.prod)
     vitals.upsert_measurements(conn, ((person, m, d, v, "pdf", doc, p, n) for m, d, v, p, n in readings))
     vitals.upsert_cycles(conn, ((person, s, e, "pdf", doc, p, n) for s, e, p, n in periods))
     print(f"\nWrote {len(readings)} readings and {len(periods)} periods to {url}")
+
+
+CLINVAR_URL = "https://ftp.ncbi.nlm.nih.gov/pub/clinvar/tab_delimited/variant_summary.txt.gz"
+
+
+def read_raw_genotypes(path: Path):
+    """23andMe (rsid, chrom, pos, genotype) or AncestryDNA (rsid, chrom, pos, allele1, allele2)."""
+    provider, build, genotypes = "Consumer DNA test", None, {}
+    with open(path, encoding="utf-8", errors="replace") as f:
+        for line in f:
+            if line.startswith("#"):
+                if "23andMe" in line:
+                    provider = "23andMe"
+                elif "AncestryDNA" in line:
+                    provider = "AncestryDNA"
+                if m := re.search(r"build (\d+)|GRCh(\d+)", line, re.I):
+                    build = f"GRCh{m.group(1) or m.group(2)}"
+                continue
+            parts = line.split()
+            if len(parts) < 4 or not parts[0].startswith("rs"):
+                continue
+            gt = parts[3] + parts[4] if len(parts) >= 5 else parts[3]
+            if "0" in gt or "-" in gt:
+                continue  # no call
+            genotypes[parts[0]] = gt.upper()
+    return provider, build or "GRCh37", genotypes
+
+
+def clinvar_findings(genotypes: dict[str, str], clinvar: Path):
+    rows = {}
+    with gzip.open(clinvar, "rt", encoding="utf-8", errors="replace") as f:
+        reader = csv.DictReader(f, delimiter="\t")
+        sig_col = next(c for c in ("ClinicalSignificance", "GermlineClassification", "Germline classification") if c in reader.fieldnames)
+        for row in reader:
+            rs = row.get("RS# (dbSNP)", "-1")
+            if rs == "-1" or f"rs{rs}" not in genotypes or row.get("Assembly") != "GRCh37":
+                continue
+            if row.get("Type") != "single nucleotide variant" or row[sig_col].lower() not in genetics.PATHOGENIC:
+                continue
+            stars = genetics.REVIEW_STARS.get(row.get("ReviewStatus", ""), 0)
+            alt = row.get("AlternateAlleleVCF") or row.get("AlternateAllele", "")
+            gt = genotypes[f"rs{rs}"]
+            if stars < 1 or len(alt) != 1 or alt not in gt:
+                continue
+            change = re.search(r"\(p\.[^)]+\)", row["Name"]) or re.search(r"c\.[^ ]+", row["Name"])
+            label = f"{row['GeneSymbol'].split(';')[0]} {change.group(0).strip('()') if change else row['Name']}"
+            conditions = [c for c in row.get("PhenotypeList", "").split("|") if c and c.lower() not in ("not provided", "not specified")]
+            key = (f"rs{rs}", label)
+            if key not in rows or stars > rows[key]["review_stars"]:
+                rows[key] = {"category": "clinvar", "gene": row["GeneSymbol"].split(";")[0], "label": label, "rsid": f"rs{rs}",
+                             "genotype": gt, "result": genetics.describe(gt.count(alt)), "detected": 1,
+                             "classification": row[sig_col], "condition": "; ".join(conditions[:3]) or None,
+                             "review_stars": stars, "note": None}
+    return list(rows.values())
+
+
+def cmd_genetics(args):
+    path = Path(args.file)
+    provider, build, genotypes = read_raw_genotypes(path)
+    if build != "GRCh37":
+        sys.exit(f"{path.name} is on {build}; matching expects GRCh37 (what 23andMe and AncestryDNA use).")
+    clinvar = Path(args.clinvar)
+    if not clinvar.exists():
+        print(f"Downloading ClinVar ({CLINVAR_URL}) to {clinvar} ...")
+        clinvar.parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["curl", "-fL", "--progress-bar", "-o", str(clinvar), CLINVAR_URL], check=True)
+    release = datetime.fromtimestamp(clinvar.stat().st_mtime).date().isoformat()
+
+    rows = genetics.panel_findings(genotypes) + genetics.pgx_findings(genotypes) + clinvar_findings(genotypes, clinvar)
+    print(f"{path.name}: {provider}, {build}, {len(genotypes):,} markers → {args.person}  (ClinVar downloaded {release})")
+    for category, title in (("panel", "Common variants"), ("pgx", "Medication-related"), ("clinvar", "ClinVar pathogenic / likely pathogenic (unconfirmed)")):
+        group = [r for r in rows if r["category"] == category]
+        print(f"\n  {title}: {len(group)}")
+        for r in group:
+            print(f"    {r['label']:<28} {r.get('genotype') or '--':<14} {r['result']}"
+                  + (f"  [{r['review_stars']}★ {r['condition'] or ''}]" if category == "clinvar" else ""))
+    if not args.commit:
+        print("\nPreview only. Re-run with --commit to write.")
+        return
+    conn, url = connect(args.prod)
+    source = {"provider": provider, "filename": path.name, "build": build, "markers": len(genotypes), "clinvar_release": release}
+    genetics.replace_findings(conn, args.person, source, rows)
+    print(f"\nWrote {len(rows)} findings to {url}")
 
 
 def main():
@@ -191,7 +284,15 @@ def main():
     manifest.add_argument("--no-upload", action="store_true", help="don't upload the PDF to the bucket")
     manifest.set_defaults(func=cmd_manifest)
 
+    genes = sub.add_parser("genetics", parents=[common], help="import 23andMe / AncestryDNA raw data (findings only)")
+    genes.add_argument("file")
+    genes.add_argument("--person", required=True)
+    genes.add_argument("--clinvar", default="Data/clinvar/variant_summary.txt.gz", help="ClinVar variant_summary (downloaded if missing)")
+    genes.set_defaults(func=cmd_genetics)
+
     args = parser.parse_args()
+    if not re.fullmatch(r"[a-z0-9_-]+", getattr(args, "person", "x")):
+        sys.exit("--person must be the account username, e.g. mia")
     args.func(args)
 
 
