@@ -55,7 +55,8 @@ def source_rows(table, rows):
 
 def vital_rows(data):
     rows = [
-        {'metric': metric, 'taken_at': point['t'], **{k: v for k, v in point.items() if k != 't'}}
+        {'metric': metric, 'taken_at': point['t'], 'value': point['v'],
+         **{k: v for k, v in point.items() if k not in ('t', 'v')}}
         for metric, points in data['series'].items()
         for point in points
     ]
