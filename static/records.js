@@ -96,13 +96,17 @@
       clinicalRows.forEach(f => byDoc.set(f.document, [...(byDoc.get(f.document) || []), f]));
       for (const [doc, findings] of byDoc) {
         const meta = docsByName[doc] || {};
-        const rows = findings.map(f => chart.preparation.decorate(el('div', { class: 'gene-row' },
-          el('div', { class: 'gene-main' }, el('b', {}, f.gene || f.test || 'Result'),
-            el('span', { class: 'mono' }, [f.variant, f.protein].filter(Boolean).join(' ') || ''),
-            f.condition ? el('p', { class: 'vital-meta' }, [f.condition, f.inheritance].filter(Boolean).join(' · ')) : null,
-            f.note ? longText(f.note) : null),
-          el('div', { class: 'gene-side' }, chip(f.classification || 'Reported', tone(f.classification)),
-            f.zygosity ? el('span', { class: 'vital-meta' }, f.zygosity) : null, sourceButton(f.document, f.page, 'Source →'))), 'clinical_genetics', f));
+        const rows = findings.map(f => {
+          const row = el('div', { class: 'gene-row' },
+            el('div', { class: 'gene-main' }, el('b', {}, f.gene || f.test || 'Result'),
+              el('span', { class: 'mono' }, [f.variant, f.protein].filter(Boolean).join(' ') || ''),
+              f.condition ? el('p', { class: 'vital-meta' }, [f.condition, f.inheritance].filter(Boolean).join(' · ')) : null,
+              f.note ? longText(f.note) : null),
+            el('div', { class: 'gene-side' }, chip(f.classification || 'Reported', tone(f.classification)),
+              f.zygosity ? el('span', { class: 'vital-meta' }, f.zygosity) : null, sourceButton(f.document, f.page, 'Source →')));
+          chart.preparation.decorate(row, 'clinical_genetics', f);
+          return row;
+        });
         kids.push(el('article', { class: 'vital-card' },
           el('div', { class: 'vital-head' }, el('div', {}, el('h2', { class: 'card-title' }, meta.title || findings[0].test || doc),
             el('p', { class: 'vital-meta' }, [day(meta.date), meta.provider, 'Clinical test'].filter(Boolean).join(' · ')))),
@@ -119,7 +123,7 @@
         if (!rows.length) continue;
         const tbody = el('tbody');
         rows.forEach(f => tbody.append(el('tr', { class: f.detected ? 'detected' : '' },
-          chart.preparation.decorate(el('td', {}, el('b', {}, f.label), f.condition ? el('div', { class: 'vital-meta' }, f.condition) : null, f.note ? el('div', { class: 'vital-meta' }, f.note) : null), 'genetic_findings', f),
+          (() => { const cell = el('td', {}, el('b', {}, f.label), f.condition ? el('div', { class: 'vital-meta' }, f.condition) : null, f.note ? el('div', { class: 'vital-meta' }, f.note) : null); chart.preparation.decorate(cell, 'genetic_findings', f); return cell; })(),
           el('td', {}, f.result, f.classification ? el('div', { class: 'vital-meta' }, `${f.classification}${f.review_stars ? ` · ${'★'.repeat(f.review_stars)}` : ''}`) : null),
           el('td', { class: 'mono' }, `${f.rsid.replace(/,/g, ', ')}\n${f.genotype || '--'}`))));
         kids.push(card(title, el('div', { class: 'reading-table tall' }, el('table', {}, el('thead', {}, el('tr', {},
