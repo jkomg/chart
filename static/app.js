@@ -3,23 +3,54 @@ const panels = [...document.querySelectorAll('.tab-panel')];
 const breadcrumb = document.querySelector('.breadcrumb');
 const toast = document.querySelector('.toast');
 
-function activate(name) {
+// Every view has a URL hash (#vitals, #doc/<file>/<page>) so the browser's back button
+// walks through what you looked at, including in and out of source documents.
+window.chart = window.chart || {};
+chart.lastTab = 'goals';
+
+function activate(name, { scroll = true } = {}) {
   const tab = document.querySelector(`.nav-item[data-tab="${name}"]`);
   const panel = document.getElementById(name);
-  if (!tab || !panel) return;
+  if (!tab || !panel) return false;
   tabs.forEach(item => item.classList.toggle('active', item === tab));
   panels.forEach(item => item.classList.toggle('active', item === panel));
-  breadcrumb.innerHTML = `OUR HOUSEHOLD <span>/</span> <b>${tab.textContent.replace(/\d+$/, '').trim().toUpperCase()}</b>`;
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  const label = [...tab.childNodes].filter(n => n.nodeType === Node.TEXT_NODE).map(n => n.textContent).join('').trim();
+  breadcrumb.innerHTML = `OUR HOUSEHOLD <span>/</span> <b>${label.toUpperCase()}</b>`;
+  tab.scrollIntoView({ block: 'nearest', inline: 'center' });
+  if (scroll) window.scrollTo({ top: 0 });
+  chart.lastTab = name;
+  document.dispatchEvent(new CustomEvent('chart:tab', { detail: name }));
+  return true;
 }
 
-tabs.forEach(tab => tab.addEventListener('click', () => activate(tab.dataset.tab)));
-document.querySelectorAll('[data-tab]').forEach(link => link.addEventListener('click', () => activate(link.dataset.tab)));
+function route() {
+  const hash = decodeURIComponent(location.hash.slice(1));
+  if (hash.startsWith('doc/')) {
+    const [, file, page] = hash.match(/^doc\/(.+?)(?:\/(\d+))?$/) || [];
+    document.dispatchEvent(new CustomEvent('chart:doc', { detail: { file, page: Number(page) || 1 } }));
+    return;
+  }
+  document.dispatchEvent(new CustomEvent('chart:doc', { detail: null }));
+  const [name, query] = hash.split('?');
+  chart.query = new URLSearchParams(query || '');
+  if (name !== chart.lastTab || !document.querySelector('.tab-panel.active')) activate(name || 'goals') || activate('goals');
+}
+
+chart.go = hash => { if (location.hash.slice(1) !== hash) location.hash = hash; };
+chart.openDoc = (file, page) => chart.go(`doc/${encodeURIComponent(file)}${page ? `/${page}` : ''}`);
+// Update the current entry (filters, etc.) without adding a history step.
+chart.replaceQuery = params => history.replaceState(null, '', `#${chart.lastTab}?${new URLSearchParams(params)}`);
+
+tabs.forEach(tab => tab.addEventListener('click', () => chart.go(tab.dataset.tab)));
+document.querySelectorAll('[data-tab]:not(.nav-item)').forEach(link => link.addEventListener('click', () => chart.go(link.dataset.tab)));
+window.addEventListener('hashchange', route);
+route();
 
 let toastTimer;
-document.querySelectorAll('[data-toast]').forEach(button => button.addEventListener('click', () => {
-  toast.textContent = button.dataset.toast.replace('.negative', '');
+chart.toast = message => {
+  toast.textContent = message;
   toast.classList.add('show');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => toast.classList.remove('show'), 2600);
-}));
+};
+document.querySelectorAll('[data-toast]').forEach(button => button.addEventListener('click', () => chart.toast(button.dataset.toast.replace('.negative', ''))));
