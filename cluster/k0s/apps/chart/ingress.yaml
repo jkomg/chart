@@ -3,26 +3,10 @@ kind: Ingress
 metadata:
   name: chart
   namespace: chart
-  annotations:
-    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
-    cert-manager.io/cluster-issuer: letsencrypt-prod
 spec:
   ingressClassName: nginx
-  tls:
-    - hosts:
-        - chart.jkomg.us
-      secretName: chart-tls
   rules:
     - host: chart.lan.jkomg.us
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: chart
-                port: { name: http }
-    - host: chart.jkomg.us
       http:
         paths:
           - path: /
