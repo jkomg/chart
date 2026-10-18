@@ -203,12 +203,22 @@ def cmd_manifest(args):
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         clinical.replace_document(conn, person, data)
         conn.execute("DELETE FROM measurements WHERE person = ? AND doc = ?", (person, doc))
-        vitals.upsert_measurements(conn, ((person, m["metric"], m["taken_at"], float(m["value"]), "pdf", doc, m.get("page"), m.get("note"))
-                                          for m in data.get("measurements", [])))
+        vitals.upsert_measurements(conn, ((person, m["metric"], m["taken_at"], float(m["value"]), "pdf", doc, m.get("page"), m.get("note"), seq)
+                                          for m, seq in with_seq(data.get("measurements", []))))
         vitals.upsert_cycles(conn, ((person, c["start"], c.get("end"), "pdf", doc, c.get("page"), c.get("note"))
                                     for c in data.get("cycles", [])))
         print(f"  imported {doc}")
     print(f"\nWrote {len(manifests)} documents to {url}")
+
+
+def with_seq(measurements):
+    """Number repeat readings of a metric on the same date (0, 1, 2...) so none overwrite another.
+    Systolic and diastolic are listed in pairs, so the nth of each lines up."""
+    seen = defaultdict(int)
+    for m in measurements:
+        key = (m["metric"], m["taken_at"])
+        yield m, seen[key]
+        seen[key] += 1
 
 
 CLINVAR_URL = "https://ftp.ncbi.nlm.nih.gov/pub/clinvar/tab_delimited/variant_summary.txt.gz"

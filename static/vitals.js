@@ -10,7 +10,7 @@
   const SOURCES = { apple_health: 'Apple Health', oura: 'Oura', pdf: 'Clinic record', manual: 'Entered by hand', lab: 'Lab report' };
   const CHARTS = [
     { key: 'blood_pressure', label: 'Blood pressure', unit: 'mmHg', series: ['bp_systolic', 'bp_diastolic'] },
-    ...['resting_hr', 'weight', 'hrv_rmssd', 'hrv_sdnn', 'spo2', 'respiratory_rate', 'body_temp', 'temp_deviation', 'vo2max']
+    ...['resting_hr', 'weight', 'bmi', 'height', 'hrv_rmssd', 'hrv_sdnn', 'spo2', 'respiratory_rate', 'body_temp', 'temp_deviation', 'vo2max']
       .map(key => ({ key, series: [key] })),
   ];
   // The server returns only the signed-in account's data; there is no way to ask for anyone else's.
@@ -248,19 +248,23 @@
       const t = dates[index];
       cross.setAttribute('x1', X(t)); cross.setAttribute('x2', X(t)); cross.setAttribute('visibility', 'visible');
       tip.replaceChildren();
+      let sameDay = 1;
       prepared.forEach((l, li) => {
-        const p = l.points.find(q => +q.d === t);
-        marks[li].setAttribute('visibility', p ? 'visible' : 'hidden');
-        if (!p) return;
-        marks[li].setAttribute('cx', X(t)); marks[li].setAttribute('cy', Y(p.v));
+        // Clinic records can have several readings on one date with no time; list them all.
+        const day = l.points.filter(q => +q.d === t);
+        marks[li].setAttribute('visibility', day.length ? 'visible' : 'hidden');
+        if (!day.length) return;
+        sameDay = Math.max(sameDay, day.length);
+        marks[li].setAttribute('cx', X(t)); marks[li].setAttribute('cy', Y(day[day.length - 1].v));
         tip.append(el('div', { class: 'tip-row' }, el('i', { style: `background:${l.color}` }),
-          el('strong', {}, `${fmt(p.v, decimals)} ${unit}`), prepared.length > 1 ? el('span', {}, l.label) : null));
-        if (dense && prepared.length === 1) tip.append(el('div', { class: 'tip-sub' }, `7-day average ${fmt(p.avg, decimals)}`));
+          el('strong', {}, `${day.map(q => fmt(q.v, decimals)).join(', ')} ${unit}`), prepared.length > 1 ? el('span', {}, l.label) : null));
+        if (dense && prepared.length === 1) tip.append(el('div', { class: 'tip-sub' }, `7-day average ${fmt(day[0].avg, decimals)}`));
       });
+      if (sameDay > 1) tip.append(el('div', { class: 'tip-sub' }, `${sameDay} readings this day, in the order the record lists them (no times given)`));
       const p = pts.find(q => +q.d === t);
       tip.append(el('div', { class: 'tip-sub' }, fmtDate(new Date(t), { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })));
       tip.append(el('div', { class: 'tip-sub' }, SOURCES[p.source] || p.source));
-      if (p.note) tip.append(el('div', { class: 'tip-sub' }, p.note));
+      if (p.note && sameDay === 1) tip.append(el('div', { class: 'tip-sub' }, p.note));  // per-reading notes would only describe the first
       if (p.doc) {
         const link = el('button', { type: 'button', class: 'tip-link' }, `View source${p.page ? ` · page ${p.page}` : ''} →`);
         link.addEventListener('click', e => { e.stopPropagation(); chart.openDoc(p.doc, p.page); });
@@ -361,14 +365,15 @@
   function readingTable(lines, unit, decimals) {
     const byDate = new Map();
     lines.forEach((l, i) => l.points.forEach(p => {
-      const row = byDate.get(p.t.slice(0, 10)) || { d: p.d, values: [], src: p };
+      const key = `${p.t.slice(0, 10)}#${p.seq || 0}`;
+      const row = byDate.get(key) || { d: p.d, seq: p.seq || 0, values: [], src: p };
       row.values[i] = p.v;
-      byDate.set(p.t.slice(0, 10), row);
+      byDate.set(key, row);
     }));
     const table = el('table', {}, el('thead', {}, el('tr', {}, el('th', {}, 'Date'),
       ...lines.map(l => el('th', { class: 'num' }, `${lines.length > 1 ? l.label : 'Value'} (${unit})`)), el('th', {}, 'Source'))));
     const tbody = el('tbody');
-    [...byDate.values()].sort((a, b) => b.d - a.d).forEach(row => {
+    [...byDate.values()].sort((a, b) => b.d - a.d || a.seq - b.seq).forEach(row => {
       const src = el('td', {}, SOURCES[row.src.source] || row.src.source);
       if (row.src.doc) {
         const b = el('button', { type: 'button', class: 'text-button' }, ` · page ${row.src.page || 1} →`);

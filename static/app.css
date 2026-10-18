@@ -157,3 +157,13 @@ body.viewer-open{overflow:hidden}
 details.more summary{font-size:12px;color:var(--muted);cursor:pointer;list-style:none;line-height:1.5}
 details.more summary::-webkit-details-marker{display:none}
 details.more[open] summary{display:none}
+
+/* ---------- goals ---------- */
+.goal-list{border-top:1px solid var(--line);margin-bottom:40px}
+.goal-row{display:flex;align-items:center;gap:16px;padding:12px 4px;border-bottom:1px solid var(--line);font-size:14px;min-height:52px}
+.goal-text{flex:1;line-height:1.45}
+.goal-actions{display:flex;gap:16px}
+.goal-actions .text-button{font-size:12px;min-height:44px}
+.goal-form{display:flex;flex:1;flex-wrap:wrap;gap:8px;padding:12px 0}
+.goal-row .goal-form{padding:0}
+.goal-empty{padding:14px 4px}

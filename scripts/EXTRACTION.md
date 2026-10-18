@@ -37,9 +37,11 @@ Rules:
     "value": 41.0, "value_text": null, "unit": "ng/mL",
     "ref_low": 30, "ref_high": 100, "ref_text": "30-100",
     "flag": null,                     // high | low | abnormal | normal | null: only as marked by the lab
+                                      // (the app labels unflagged out-of-range values itself, as "calc.")
     "taken_at": "2023-09-13", "page": 4
   }],
-  "measurements": [{                 // vitals; metric must be a key of vitals.METRICS
+  "measurements": [{                 // vitals; metric must be a key of vitals.METRICS. Several readings of
+                                     // one metric on one date are all kept, in listed order; list BP pairs together
     "metric": "bp_systolic", "value": 112, "taken_at": "2022-01-07", "page": 1, "note": "seated"
   }],
   "events": [{                       // timeline entries for Medical history

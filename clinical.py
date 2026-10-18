@@ -145,4 +145,21 @@ def load_clinical(conn, person: str) -> dict:
     for table, cols in TABLES.items():
         rows = conn.execute(f"SELECT {', '.join(cols)} FROM {table} WHERE person = ? ORDER BY {order[table]}", (person,)).fetchall()
         out[table] = [dict(zip(cols, r)) for r in rows]
+    for row in out["lab_results"]:
+        row["flag_calculated"] = False
+        if not row["flag"]:
+            row["flag"] = calculated_flag(row)
+            row["flag_calculated"] = row["flag"] is not None
     return out
+
+
+def calculated_flag(row: dict) -> str | None:
+    """High/low from the printed range, for results the lab printed no flag on."""
+    value, low, high = row["value"], row["ref_low"], row["ref_high"]
+    if value is None:
+        return None
+    if high is not None and value > high:
+        return "high"
+    if low is not None and value < low:
+        return "low"
+    return None
