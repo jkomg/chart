@@ -199,10 +199,12 @@
     return [...byTest.values()];
   }
 
-  function flagChip(flag) {
+  // flag_calculated: the lab printed no flag; the server compared the value to the printed range.
+  function flagChip(flag, calculated) {
     const f = (flag || '').toLowerCase();
-    if (f === 'high') return chip('▲ High', 'bad');
-    if (f === 'low') return chip('▼ Low', 'bad');
+    const calc = c => { if (calculated) { c.textContent += ' (calc.)'; c.title = 'Calculated from the printed range; the lab did not flag this result'; } return c; };
+    if (f === 'high') return calc(chip('▲ High', 'bad'));
+    if (f === 'low') return calc(chip('▼ Low', 'bad'));
     if (f === 'abnormal') return chip('● Abnormal', 'bad');
     return null;
   }
@@ -232,7 +234,7 @@
     if (g.numeric.length >= 2) {
       const plot = el('div', { class: 'plot' });
       const points = g.numeric.map(r => ({ t: r.taken_at, d: parse(r.taken_at), v: r.value, source: 'lab', doc: r.document, page: r.page,
-                                           note: [r.provider, r.flag ? r.flag.toUpperCase() : null].filter(Boolean).join(' · ') || null }));
+                                           note: [r.provider, r.flag ? `${r.flag.toUpperCase()}${r.flag_calculated ? ' (calculated from printed range)' : ''}` : null].filter(Boolean).join(' · ') || null }));
       const lo = latest.ref_low, hi = latest.ref_high;
       const range = lo != null || hi != null ? [lo ?? -Infinity, hi ?? Infinity] : null;
       const decimals = Math.max(...g.numeric.map(r => (String(r.value).split('.')[1] || '').length), 0);
@@ -242,7 +244,7 @@
     }
     const tbody = el('tbody');
     [...g.rows].reverse().forEach(r => tbody.append(el('tr', {},
-      el('td', {}, day(r.taken_at)), el('td', { class: 'num' }, valueText(r)), el('td', {}, flagChip(r.flag) || ''),
+      el('td', {}, day(r.taken_at)), el('td', { class: 'num' }, valueText(r)), el('td', {}, flagChip(r.flag, r.flag_calculated) || ''),
       el('td', {}, refText(r)), el('td', {}, sourceButton(r.document, r.page, `${docTitle(r.document)} · p.${r.page || 1} →`)))));
     box.append(el('div', { class: 'reading-table' }, el('table', {}, el('thead', {}, el('tr', {},
       el('th', {}, 'Date'), el('th', { class: 'num' }, 'Result'), el('th', {}, 'Flag'), el('th', {}, 'Reference'), el('th', {}, 'Source'))), tbody)));
@@ -286,7 +288,7 @@
             el('span', { class: 'lab-name' }, el('b', {}, g.test), el('small', {}, `${g.rows.length} result${g.rows.length > 1 ? 's' : ''} · latest ${day(g.latest.taken_at)}`)),
             g.numeric.length >= 2 ? sparkline(g.numeric) : el('span', { class: 'spark' }),
             el('span', { class: 'lab-value' }, valueText(g.latest)),
-            el('span', { class: 'lab-flag' }, flagChip(g.latest.flag) || ''),
+            el('span', { class: 'lab-flag' }, flagChip(g.latest.flag, g.latest.flag_calculated) || ''),
             el('span', { class: 'lab-ref' }, refText(g.latest)));
           const wrap = el('div', { class: 'lab-wrap' }, row);
           if (open) wrap.append(labDetail(g));

@@ -1,3 +1,4 @@
+import copy
 import hashlib
 import hmac
 import json
@@ -31,7 +32,7 @@ app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax", S
 
 # Each account is fully separate: its own records, documents, vitals, and genetics.
 DEFAULT_RECORDS = {
-    "goals": {"why": "Keep my medical information in one calm, private place.", "immediate": ["Add current care team and upcoming appointments.", "Upload recent lab reports and imaging."], "questions": ["What should we ask at the next visit?", "Which follow-ups are due?"]},
+    "goals": {"items": [], "questions": []},
     "history": [{"date": "Add date", "title": "Medical history entry", "detail": "Replace this starter record with the relevant event, diagnosis, or procedure."}],
     "family_history": [{"relation": "Add relation", "detail": "Add family history details here."}],
     "labs": [{"date": "Add date", "name": "Lab panel", "value": "Add result", "range": "Add reference range", "status": "Pending"}],
@@ -85,7 +86,10 @@ def check_password(password: str, stored: str) -> bool:
 
 def load_records(user: str) -> dict:
     row = get_db().execute("SELECT data FROM user_records WHERE username = ?", (user,)).fetchone()
-    return json.loads(row[0]) if row else DEFAULT_RECORDS
+    records = json.loads(row[0]) if row else copy.deepcopy(DEFAULT_RECORDS)
+    if "items" not in records.get("goals", {}):
+        records["goals"] = copy.deepcopy(DEFAULT_RECORDS["goals"])  # the old starter shape had only placeholder text
+    return records
 
 
 def save_records(user: str, records: dict):
@@ -153,6 +157,24 @@ def records_api():
     if guard:
         return jsonify({"error": "unauthorized"}), 401
     return jsonify(load_records(session["user"]))
+
+
+@app.post("/api/goals")
+def goals_api():
+    if not session.get("user"):
+        return jsonify({"error": "unauthorized"}), 401
+    # JSON only: a cross-site form can't send it, so this doubles as CSRF protection.
+    body = request.get_json(silent=True) if request.is_json else None
+    goals = {}
+    for key in ("items", "questions"):
+        values = (body or {}).get(key)
+        if not isinstance(values, list) or len(values) > 100 or not all(isinstance(v, str) and len(v) <= 2000 for v in values):
+            return jsonify({"error": f"{key} must be a list of strings"}), 400
+        goals[key] = [v.strip() for v in values if v.strip()]
+    records = load_records(session["user"])
+    records["goals"] = goals
+    save_records(session["user"], records)
+    return jsonify(goals)
 
 
 @app.get("/api/vitals")
