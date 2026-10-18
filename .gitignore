@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.venv/
+.env
+data/
+!data/medical.example.json
+.DS_Store

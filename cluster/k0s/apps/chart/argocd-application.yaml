@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: chart
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: git@github.com:jkomg/chart.git
+    targetRevision: main
+    path: cluster/k0s/apps/chart
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: chart
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

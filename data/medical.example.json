@@ -1,0 +1,9 @@
+{
+  "people": ["Jason", "Mia"],
+  "goals": {"why": "Keep our medical information in one calm, shared place.", "immediate": ["Add current care team and upcoming appointments.", "Upload recent lab reports and imaging."], "questions": ["What should we ask at the next visit?", "Which follow-ups are due?"]},
+  "history": [],
+  "family_history": [],
+  "labs": [],
+  "medications": [],
+  "synopsis": "Add a concise, clinician-friendly synopsis once the source records are uploaded."
+}
