@@ -44,6 +44,9 @@ jobs:
           assert c.get('/api/vitals').status_code == 401
           print('ok')"
 
+      - name: Dashboard and account isolation regressions
+        run: docker run --rm -v "$PWD/tests:/tests:ro" --entrypoint python chart:pr -m unittest discover -s /tests -v
+
   deploy:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest

@@ -76,3 +76,25 @@ python3 app.py
 ## k0s (LAN)
 
 `cluster/k0s/apps/chart` is synced by Argo CD to `chart.lan.jkomg.us`. It's pinned to an older arm64 image that stores data on a PVC, because newer images need Turso/GCS and have no arm64 build.
+
+## Appointment view
+
+The chart opens in **Provider** view, with editing and PDF uploads hidden. **Prepare**
+shows the goal editor and upload controls. This is a presentation switch within the
+signed-in account, not a separate login or access restriction. The selected view is
+remembered per account for the current browser tab/session.
+
+The first six goals, in saved order, are the visit priorities. In Prepare, use the
+arrows to reorder goals or **Make priority** to move an additional goal into the
+sixth position. Remaining goals stay available under **Additional goals**.
+
+Labs separate a defined set of common tests from other testing. Categories collapse;
+search includes collapsed categories and reported test names, and reveals matching
+results. Each test expands into its dated results, trend, and source-page links.
+Medical history groups documented conditions by status, procedures, and visits by
+year. Search reveals matching sections. Status and medication lists reflect source
+records; they do not establish what is current today.
+
+Frontend modules: `clinical-ui.js` provides shared source links and accordions;
+`labs.js` and `history.js` render those sections; `records.js` loads clinical data
+and renders the remaining record views. No build step or new dependencies are needed.

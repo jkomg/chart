@@ -14,7 +14,13 @@
     return node;
   };
 
+  let saving = false;
   async function save(next) {
+    if (saving) return false;
+    if (chart.mode !== 'owner') return false;
+    saving = true;
+    const controls = [...section.querySelectorAll('button')].map(button => [button, button.disabled]);
+    controls.forEach(([button]) => { button.disabled = true; });
     try {
       const res = await fetch('/api/goals', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(next) });
       if (res.status === 401) { location.href = '/login'; return false; }
@@ -25,6 +31,9 @@
     } catch {
       chart.toast('Couldn’t save. Check the connection and try again.');
       return false;
+    } finally {
+      saving = false;
+      controls.forEach(([button, disabled]) => { if (button.isConnected) button.disabled = disabled; });
     }
   }
   const change = (key, fn) => save({ ...goals, [key]: fn([...goals[key]]) });
@@ -49,13 +58,22 @@
   }
 
   function render() {
+    const owner = chart.mode === 'owner';
     for (const list of lists) {
       const { key, label, empty } = list.dataset;
       const items = goals[key] || [];
       list.replaceChildren();
       if (!items.length) list.append(el('p', { class: 'vital-meta goal-empty' }, empty));
+      let extra;
+      if (!owner && key === 'items' && items.length > 6) {
+        extra = el('details', { class: 'record-section goal-extra' }, el('summary', {}, el('span', { class: 'section-heading' }, 'Additional goals'), el('span', { class: 'section-meta' }, String(items.length - 6))));
+      }
       items.forEach((text, i) => {
         const row = el('div', { class: 'goal-row' }, el('span', { class: 'question-number' }, String(i + 1).padStart(2, '0')), el('span', { class: 'goal-text' }, text));
+        if (!owner) {
+          (extra && i >= 6 ? extra : list).append(row);
+          return;
+        }
         const edit = el('button', { type: 'button', class: 'text-button' }, 'Edit');
         const remove = el('button', { type: 'button', class: 'text-button' }, 'Remove');
         edit.addEventListener('click', () => {
@@ -64,18 +82,34 @@
           input.focus();
         });
         remove.addEventListener('click', () => { if (confirm(`Remove this ${label}?\n\n${text}`)) change(key, xs => { xs.splice(i, 1); return xs; }); });
-        row.append(el('span', { class: 'goal-actions' }, edit, remove));
+        const actions = el('span', { class: 'goal-actions' });
+        for (const [offset, label, symbol] of [[-1, 'Move up', '↑'], [1, 'Move down', '↓']]) {
+          const move = el('button', { type: 'button', class: 'outline-button compact', 'aria-label': `${label}: ${text}` }, symbol);
+          move.disabled = i + offset < 0 || i + offset >= items.length;
+          move.addEventListener('click', () => change(key, xs => { [xs[i], xs[i + offset]] = [xs[i + offset], xs[i]]; return xs; }));
+          actions.append(move);
+        }
+        if (key === 'items' && i >= 6) {
+          const promote = el('button', { type: 'button', class: 'text-button' }, 'Make priority');
+          promote.addEventListener('click', () => change(key, xs => { const [item] = xs.splice(i, 1); xs.splice(5, 0, item); return xs; }));
+          actions.append(promote);
+        }
+        actions.append(edit, remove);
+        row.append(actions);
         list.append(row);
       });
+      if (extra) list.append(extra);
+      if (!owner) continue;
       const { form, input } = editor('', t => change(key, xs => [...xs, t]), null, `Add a ${label}`);
       input.placeholder = `Add a ${label}`;
       list.append(form);
     }
     if (navItem) {
       navItem.querySelector('em')?.remove();
-      if (goals.items.length) navItem.append(' ', el('em', {}, String(goals.items.length)));
+      if (goals.items.length) navItem.append(' ', el('em', {}, String(Math.min(goals.items.length, 6))));
     }
   }
 
+  document.addEventListener('chart:mode', render);
   render();
 })();

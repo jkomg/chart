@@ -54,3 +54,17 @@ chart.toast = message => {
   toastTimer = setTimeout(() => toast.classList.remove('show'), 2600);
 };
 document.querySelectorAll('[data-toast]').forEach(button => button.addEventListener('click', () => chart.toast(button.dataset.toast.replace('.negative', ''))));
+
+// A presentation mode on the signed-in account, not a separate provider login.
+chart.mode = 'provider';
+chart.setMode = (mode, navigate = false) => {
+  chart.mode = mode === 'owner' ? 'owner' : 'provider';
+  document.body.dataset.mode = chart.mode;
+  document.querySelectorAll('.mode-switch button').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.mode === chart.mode)));
+  document.getElementById('view-label').textContent = chart.mode === 'provider' ? 'Provider view' : 'Prepare for visit';
+  try { sessionStorage.setItem(`chart-mode:${document.body.dataset.account}`, chart.mode); } catch {}
+  document.dispatchEvent(new CustomEvent('chart:mode', { detail: chart.mode }));
+  if (navigate && chart.mode === 'provider') chart.go('goals');
+};
+document.querySelectorAll('.mode-switch button').forEach(button => button.addEventListener('click', () => chart.setMode(button.dataset.mode, true)));
+try { chart.setMode(sessionStorage.getItem(`chart-mode:${document.body.dataset.account}`)); } catch { chart.setMode('provider'); }
