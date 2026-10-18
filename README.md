@@ -117,3 +117,10 @@ including when names match and no date is provided.
 Frontend rendering regressions run with `npm ci` then `npm test` (Node 22 in CI).
 The DOM library is a development-only dependency; serving the app still needs no
 JavaScript build step or Node runtime.
+
+In **Edit / add notes**, **Delete entry** removes the displayed entry from the chart
+and asks for confirmation. Lab editors call this **Delete result**. Deleted entries
+stay recoverable under **Deleted entries** in Prepare, including their saved notes
+and patient updates. Grouped conditions and medications are deleted/restored with all
+the source rows represented by that item. Original source PDFs remain available.
+Deletions survive re-imports of unchanged source rows.

@@ -49,18 +49,24 @@ def source_rows(table, rows):
 
 
 def apply(data, updates):
+    deleted = {table: [] for table in FIELDS}
     for table in FIELDS:
+        visible = []
         for key, row in source_rows(table, data[table]):
             row['_key'] = key
-            update = updates.get(row['_key'])
-            if update:
+            update = updates.get(key)
+            if update and (update['fields'] or update['notes']):
                 row['_original'] = {k: row.get(k) for k in FIELDS[table]}
                 row.update(update['fields'])
                 row['_patient_note'] = update['notes']
                 row['_patient_updated'] = bool(update['fields'])
+            (deleted[table] if update and update.get('deleted') else visible).append(row)
         for key, update in updates.items():
             if key.startswith(table + ':manual:'):
-                data[table].append({**{k: None for k in data_columns(table)}, **update['fields'], '_key': key, '_manual': True, '_patient_note': update['notes']})
+                row = {**{k: None for k in data_columns(table)}, **update['fields'], '_key': key, '_manual': True, '_patient_note': update['notes']}
+                (deleted[table] if update.get('deleted') else visible).append(row)
+        data[table] = visible
+    data['deleted_entries'] = deleted
     return data
 
 

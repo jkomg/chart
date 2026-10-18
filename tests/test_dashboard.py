@@ -150,6 +150,56 @@ class DashboardTests(unittest.TestCase):
         self.assertNotIn('_patient_note', remaining[-1])
 
 
+    def test_delete_and_restore_source_group_preserves_updates_and_reimport(self):
+        manifest = {'document': 'sample.pdf', 'diagnoses': [
+            {'name': 'Sample condition', 'date': '2024-01-01', 'status': 'active', 'page': 1},
+            {'name': 'Sample condition', 'date': '2025-01-01', 'status': 'active', 'page': 2},
+        ]}
+        app.clinical.replace_document(app.get_db(), 'sample-a', manifest)
+        keys = [row['_key'] for row in self.client.get('/api/clinical').json['diagnoses']]
+        self.client.put('/api/preparation/entries/diagnoses/' + keys[0], json={'fields': {'note': 'Saved detail'}, 'notes': 'Saved note'})
+        url = '/api/preparation/entries/diagnoses'
+        self.assertEqual(self.client.patch(url, json={'keys': keys, 'deleted': True}).status_code, 200)
+        data = self.client.get('/api/clinical').json
+        self.assertEqual(data['diagnoses'], [])
+        self.assertEqual(len(data['deleted_entries']['diagnoses']), 2)
+        self.assertEqual(len(app.clinical.load_clinical(app.get_db(), 'sample-a')['diagnoses']), 2)
+        app.clinical.replace_document(app.get_db(), 'sample-a', manifest)
+        self.assertEqual(self.client.get('/api/clinical').json['diagnoses'], [])
+        # Editing a deleted record must not accidentally restore it.
+        self.client.put('/api/preparation/entries/diagnoses/' + keys[0], json={'fields': {'note': 'Updated detail'}, 'notes': 'Updated note'})
+        self.assertEqual(self.client.get('/api/clinical').json['diagnoses'], [])
+        self.assertEqual(self.client.patch(url, json={'keys': keys, 'deleted': False}).status_code, 200)
+        restored = self.client.get('/api/clinical').json
+        self.assertEqual(len(restored['diagnoses']), 2)
+        self.assertEqual(restored['deleted_entries']['diagnoses'], [])
+        self.assertEqual(restored['diagnoses'][0]['_patient_note'], 'Updated note')
+        self.assertEqual(restored['diagnoses'][0]['note'], 'Updated detail')
+        self.assertNotIn('_original', restored['diagnoses'][1])
+
+    def test_delete_validation_is_atomic_and_account_scoped(self):
+        created = self.client.post('/api/preparation/entries/medications', json={'fields': {'name': 'Sample medication'}, 'notes': 'Sample note'}).json
+        key, url = created['key'], '/api/preparation/entries/medications'
+        for payload in [{'keys': [], 'deleted': True}, {'keys': [key], 'deleted': 'true'}, {'keys': [2], 'deleted': True}, []]:
+            self.assertEqual(self.client.patch(url, json=payload).status_code, 400)
+        self.assertEqual(self.client.patch(url, data='deleted=true').status_code, 400)
+        self.assertEqual(self.client.patch(url, json={'keys': [key, 'unknown-key'], 'deleted': True}).status_code, 404)
+        self.assertEqual(len(self.client.get('/api/clinical').json['medications']), 1)
+        with self.client.session_transaction() as session:
+            session['user'] = 'sample-b'
+        self.assertEqual(self.client.patch(url, json={'keys': [key], 'deleted': True}).status_code, 404)
+        self.assertEqual(self.client.get('/api/clinical').json['deleted_entries']['medications'], [])
+        with self.client.session_transaction() as session:
+            session['user'] = 'sample-a'
+        self.assertEqual(self.client.patch(url, json={'keys': [key], 'deleted': True}).status_code, 200)
+        self.assertEqual(self.client.get('/api/clinical').json['medications'], [])
+        self.assertEqual(self.client.patch(url, json={'keys': [key], 'deleted': False}).status_code, 200)
+        self.assertEqual(self.client.get('/api/clinical').json['medications'][0]['_patient_note'], 'Sample note')
+        with self.client.session_transaction() as session:
+            session.clear()
+        self.assertEqual(self.client.patch(url, json={'keys': [key], 'deleted': True}).status_code, 401)
+
+
 
 if __name__ == '__main__':
     unittest.main()

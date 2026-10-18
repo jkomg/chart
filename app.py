@@ -216,7 +216,7 @@ def preparation_section(section):
     return jsonify(update)
 
 
-@app.route('/api/preparation/entries/<table>', methods=['POST'])
+@app.route('/api/preparation/entries/<table>', methods=['POST', 'PATCH'])
 @app.route('/api/preparation/entries/<table>/<key>', methods=['PUT', 'DELETE'])
 def preparation_entry(table, key=None):
     if not session.get('user'):
@@ -225,6 +225,23 @@ def preparation_entry(table, key=None):
     if table not in preparation.FIELDS:
         return jsonify({'error': 'Unknown record type'}), 404
     updates = preparation.load(conn, user)
+    if request.method == 'PATCH':
+        body = request.get_json(silent=True) if request.is_json else None
+        if not isinstance(body, dict) or set(body) != {'keys', 'deleted'} or type(body['deleted']) is not bool:
+            return jsonify({'error': 'Provide record keys and a deleted boolean'}), 400
+        keys = body['keys']
+        if not isinstance(keys, list) or not 1 <= len(keys) <= 1000 or not all(isinstance(k, str) for k in keys):
+            return jsonify({'error': 'Provide between 1 and 1,000 record keys'}), 400
+        valid = {source_key for source_key, _ in preparation.source_rows(table, clinical.load_clinical(conn, user)[table])}
+        valid.update(k for k in updates if k.startswith(table + ':manual:'))
+        if any(k not in valid for k in keys):
+            return jsonify({'error': 'Record not found'}), 404
+        for record_key in set(keys):
+            update = {**updates.get(record_key, {'fields': {}, 'notes': ''}), 'deleted': body['deleted']}
+            preparation_data = json.dumps(update)
+            conn.execute('INSERT INTO preparation (person, key, data) VALUES (?, ?, ?) ON CONFLICT(person, key) DO UPDATE SET data = excluded.data', (user, record_key, preparation_data))
+        conn.commit()
+        return jsonify({'ok': True})
     manual = key is None or key.startswith(table + ':manual:')
     if key is not None:
         exists = key in updates if manual else any(source_key == key for source_key, _ in preparation.source_rows(table, clinical.load_clinical(conn, user)[table]))
@@ -239,6 +256,8 @@ def preparation_entry(table, key=None):
         update = preparation.validate_entry(table, body, manual)
     except ValueError as error:
         return jsonify({'error': str(error)}), 400
+    if key and updates.get(key, {}).get('deleted'):
+        update['deleted'] = True
     key = key or preparation.manual_key(table)
     preparation.save(conn, user, key, update)
     return jsonify({'key': key, **update}), 201 if request.method == 'POST' else 200

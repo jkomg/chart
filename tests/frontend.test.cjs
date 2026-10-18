@@ -25,13 +25,14 @@ function environment(data = {}) {
   run('clinical-ui');
   run('record-groups');
   chart.preparation = {
+    renderDeleted() {},
     addButton: () => el('button', {}, 'Add'),
     decorate: (container, table, row) => {
       if (row._manual) container.append(el('p', { class: 'patient-label' }, 'Patient-entered'));
       container.append(el('button', { 'data-key': row._key, class: 'edit-record' }, 'Edit / add notes'));
     }
   };
-  return { chart, document, run };
+  return { chart, document, run, context, window };
 }
 const settled = () => new Promise(resolve => setImmediate(resolve));
 
@@ -78,3 +79,70 @@ for (const [table, section, selector] of [['diagnoses', 'history', '.history-ent
     if (section === 'history') assert.ok(document.querySelector(`#${section} .condition-sources`).textContent.includes('2 source records'));
   });
 }
+
+function editorEnvironment() {
+  const env = environment();
+  const { chart, document, run, context } = env;
+  const bootstrap = document.createElement('script');
+  bootstrap.id = 'preparation-data'; bootstrap.textContent = '{}';
+  document.body.append(bootstrap);
+  chart.mode = 'owner'; chart.toast = message => { env.toast = message; };
+  chart.reloadClinical = async () => { env.refreshes++; return true; };
+  env.refreshes = 0; env.requests = []; env.confirmed = true; env.failure = false;
+  context.confirm = () => env.confirmed;
+  context.fetch = async (url, options) => {
+    env.requests.push({ url, method: options.method, body: JSON.parse(options.body) });
+    return { ok: !env.failure, status: env.failure ? 500 : 200, json: async () => env.failure ? { error: 'Deletion failed' } : { ok: true } };
+  };
+  run('preparation');
+  const dialog = document.querySelector('dialog');
+  dialog.showModal = () => { dialog.open = true; };
+  dialog.close = () => { dialog.open = false; };
+  env.dialog = dialog;
+  return env;
+}
+
+test('Delete entry confirms, removes the complete source group, and preserves drafts on failure', async () => {
+  const env = editorEnvironment();
+  const { chart, document, dialog } = env;
+  const card = document.createElement('article'); document.body.append(card);
+  chart.preparation.decorate(card, 'diagnoses', { name: 'Sample condition', _key: 'latest', document: 'sample.pdf', sources: [{ _key: 'older' }, { _key: 'latest' }] });
+  card.querySelector('.edit-record').click();
+  const remove = dialog.querySelector('.danger-button');
+  assert.equal(remove.textContent, 'Delete entry');
+  env.confirmed = false; remove.click(); await settled();
+  assert.equal(env.requests.length, 0);
+  env.confirmed = true; env.failure = true;
+  const name = dialog.querySelector('input'); name.value = 'Unsaved change';
+  remove.click(); await settled();
+  assert.equal(dialog.open, true);
+  assert.equal(name.value, 'Unsaved change');
+  assert.equal(remove.disabled, false);
+  assert.ok(dialog.textContent.includes('Deletion failed'));
+  assert.equal(env.refreshes, 0);
+  env.failure = false; remove.click(); await settled();
+  assert.deepEqual(env.requests.at(-1), { url: '/api/preparation/entries/diagnoses', method: 'PATCH', body: { keys: ['older', 'latest'], deleted: true } });
+  assert.equal(dialog.open, false);
+  assert.equal(env.toast, 'Entry deleted.');
+  assert.equal(env.refreshes, 1);
+});
+
+test('Deleted entries can be restored in Prepare and remain unavailable in Provider mode', async () => {
+  const env = editorEnvironment();
+  const { chart, document } = env;
+  chart.preparation.renderDeleted({ deleted_entries: { medications: [
+    { name: 'Sample medication', date: '2025-01-01', document: 'sample.pdf', _key: 'older' },
+    { name: 'Sample medication', date: '2026-01-01', document: 'sample.pdf', _key: 'latest' },
+    { name: 'Sample medication', _manual: true, _key: 'manual' }
+  ] } });
+  const list = document.querySelector('#medications .deleted-entries');
+  assert.ok(list.classList.contains('owner-only'));
+  assert.ok(list.textContent.includes('Deleted entries (2)'));
+  const restore = list.querySelector('button');
+  chart.mode = 'provider'; restore.click(); await settled();
+  assert.equal(env.requests.length, 0);
+  chart.mode = 'owner'; restore.click(); await settled();
+  assert.deepEqual(env.requests[0].body, { keys: ['older', 'latest'], deleted: false });
+  assert.equal(env.toast, 'Entry restored.');
+  assert.equal(env.refreshes, 1);
+});
