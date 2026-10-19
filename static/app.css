@@ -292,3 +292,30 @@ body[data-mode=provider] .sidebar-bottom form{display:none}
   .exit-presentation{margin:0;font-size:11px;min-height:44px;padding:8px}
   body[data-mode=provider] .brand{padding-right:128px}
 }
+
+/* Keep the desktop navigation anchored to the viewport as the active page scrolls. */
+@media(min-width:901px){
+  .sidebar{position:sticky;top:0;height:100vh;min-height:100vh;align-self:flex-start;overflow-y:auto;overscroll-behavior:contain}
+}
+
+/* Family history is organized as a profile per relative, with conditions kept inside it. */
+.family-grid{display:flex;flex-direction:column;gap:12px;margin-top:18px}
+.family-profile{background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.family-profile[open]{border-color:#cbd9d1;box-shadow:0 8px 22px rgba(49,77,87,.06)}
+.family-profile-summary{display:flex;align-items:center;gap:13px;min-height:78px;padding:15px 19px;cursor:pointer;list-style:none}
+.family-profile-summary::-webkit-details-marker{display:none}
+.family-profile-summary:focus-visible{outline:2px solid var(--teal);outline-offset:-3px}
+.family-profile-summary .profile-avatar{width:42px;height:42px;font-size:14px;flex:0 0 auto}
+.family-profile-name{font:400 20px 'Libre Baskerville',serif;color:#2d4147}
+.family-profile-count{margin-left:auto;color:var(--muted);font-size:11px}
+.family-profile-chevron{color:#80928c;transition:transform .18s}
+.family-profile[open] .family-profile-chevron{transform:rotate(180deg)}
+.family-profile-content{padding:0 18px 18px;border-top:1px solid #edf0ed}
+.family-condition{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 16px;align-items:center;padding:17px 2px;border-bottom:1px solid #edf0ed}
+.family-condition h2{font:500 15px 'DM Sans',sans-serif;color:#33474b;margin:2px 0 0}
+.family-condition .eyebrow{margin:0;font-size:9px}
+.family-condition .source-link,.family-condition .patient-label,.family-condition .patient-text,.family-condition .edit-record{grid-column:1}
+.family-condition .family-delete{grid-column:2;grid-row:1 / span 5;align-self:center;color:#9a625a}
+.family-profile-content>.outline-button{margin-top:15px}
+.family-empty{padding:18px 0;color:var(--muted);font-size:13px}
+@media(max-width:620px){.family-profile-summary{padding:13px 14px}.family-profile-content{padding:0 14px 14px}.family-condition{gap:8px}.family-profile-count{font-size:10px}}
