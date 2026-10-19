@@ -13,7 +13,7 @@ FIELDS = {
     'lab_results': (),
     'clinical_genetics': (),
     'genetic_findings': (),
-    'documents': (),
+    'documents': ('summary',),
     'measurements': ('metric', 'taken_at', 'value'),
     'cycles': ('start', 'end'),
 }

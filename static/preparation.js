@@ -8,6 +8,7 @@
     events: { title: 'Event or procedure', type: 'Type', date: 'Date', detail: 'Details' },
     medications: { name: 'Medication', dose: 'Dose', schedule: 'Schedule', context: 'Status / context', date: 'Date confirmed' },
     family_history: { relation: 'Relation', condition: 'Condition' },
+    documents: { summary: 'Summary shown on the Medical records page' },
     lab_results: {},
     measurements: { metric: 'Measurement', taken_at: 'Date', value: 'Value' },
     cycles: { start: 'Period started', end: 'Period ended' }
@@ -97,9 +98,13 @@
       ? 'Add family member'
       : table === 'family_history' && defaults.relation
       ? `${row ? 'Edit' : 'Add'} family history for ${defaults.relation}`
+      : table === 'documents'
+      ? 'Edit medical record summary'
       : `${row ? 'Edit' : 'Add'} ${titles[table]}`;
     form.append(el('h2', { id: 'record-editor-title' }, title),
-      el('p', { class: 'vital-meta' }, row?.document ? 'Your update is shown separately from the original source record.' : 'This will be labeled as patient-entered information.'));
+      el('p', { class: 'vital-meta' }, table === 'documents'
+        ? 'This changes the summary shown in your chart. The source PDF stays unchanged.'
+        : row?.document ? 'Your update is shown separately from the original source record.' : 'This will be labeled as patient-entered information.'));
     for (const [field, label] of Object.entries(labels[table])) {
       let input;
       if (field === 'status') {
@@ -109,7 +114,7 @@
         if (current && !['active', 'suspected', 'history', 'resolved'].includes(current.toLowerCase())) input.append(el('option', { value: current }, current));
         input.value = ['active', 'suspected', 'history', 'resolved'].includes(current.toLowerCase()) ? current.toLowerCase() : current;
       } else {
-        input = ['note', 'detail'].includes(field) ? el('textarea', { rows: 3, maxlength: 2000 }) : el('input', { type: field === 'date' ? 'date' : 'text', maxlength: 2000 });
+        input = ['note', 'detail', 'summary'].includes(field) ? el('textarea', { rows: 3, maxlength: 2000 }) : el('input', { type: field === 'date' ? 'date' : 'text', maxlength: 2000 });
         input.value = row?.[field] ?? defaults[field] ?? '';
       }
       inputs[field] = input;
@@ -126,7 +131,7 @@
     });
     const actions = el('div', { class: 'editor-actions' }, save, cancel);
     const url = '/api/preparation/entries/' + table + (row ? '/' + encodeURIComponent(row._key) : '');
-    if (row) {
+    if (row && table !== 'documents') {
       const remove = el('button', { type: 'button', class: 'danger-button' }, table === 'lab_results' ? 'Delete result' : 'Delete entry');
       remove.addEventListener('click', async () => {
         if (chart.mode !== 'owner') return;
@@ -140,7 +145,7 @@
       });
       actions.append(remove);
     }
-    if (row && !row._manual && row._original) {
+    if (row && table !== 'documents' && !row._manual && row._original) {
       const reset = el('button', { type: 'button', class: 'text-button' }, 'Restore original record');
       reset.addEventListener('click', async () => {
         if (chart.mode !== 'owner' || !confirm('Remove your update and notes, and show the original record?')) return;
@@ -216,7 +221,7 @@
         container.append(original);
       }
     }
-    const edit = el('button', { type: 'button', class: 'text-button owner-only edit-record' }, table === 'lab_results' ? 'Edit notes' : 'Edit / add notes');
+    const edit = el('button', { type: 'button', class: 'text-button owner-only edit-record' }, table === 'lab_results' ? 'Edit notes' : table === 'documents' ? 'Edit summary' : 'Edit / add notes');
     edit.addEventListener('click', () => editRecord(table, row));
     container.append(edit);
     return container;
