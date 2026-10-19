@@ -58,8 +58,9 @@
   function renderPriority(item, index, items, owner) {
     const card = el('article', { class: `priority-card${owner ? ' priority-card-editing' : ' priority-card-provider'}` });
     const priorityLabel = `Priority ${index + 1}`;
-    const heading = el('div', { class: 'priority-card-heading' }, el('h2', { class: 'priority-heading' }, priorityLabel));
+    const heading = el('div', { class: 'priority-card-heading' });
     if (owner) {
+      card.append(heading);
       const actions = el('div', { class: 'priority-actions' });
       for (const [offset, symbol, action] of [[-1, '↑', 'Move up'], [1, '↓', 'Move down']]) {
         const button = el('button', { type: 'button', class: 'outline-button compact', 'aria-label': `${action} priority ${index + 1}` }, symbol);
@@ -75,7 +76,6 @@
       actions.append(remove);
       heading.append(actions);
     }
-    card.append(heading);
     if (owner) {
       const form = el('form', { class: 'priority-fields priority-form' });
       const inputs = {};

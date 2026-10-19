@@ -58,7 +58,7 @@ test('Visit priorities show and save the three structured details with an explic
   } });
   run('goals');
   const priority = document.querySelector('.priority-card');
-  assert.equal(priority.querySelector('.priority-heading').textContent, 'Priority 1');
+  assert.equal(priority.querySelector('.priority-heading'), null, 'the card has no duplicate large priority heading');
   assert.deepEqual([...priority.querySelectorAll('.priority-field>span')].map(node => node.textContent), [
     'Priority 1', 'Goal', 'Requested clinical direction'
   ]);
