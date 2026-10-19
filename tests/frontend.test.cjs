@@ -58,20 +58,27 @@ test('Documents and Genetics retain preparation content during initial and repea
 
 test('Family history renders one expandable profile per relative with their own conditions', async () => {
   const { document, run } = environment({ family_history: [
+    { relation: 'Dad', condition: 'Diabetes', _key: 'dad-diabetes' },
+    { relation: 'Maternal grandparent (unspecified)', condition: 'Heart disease', _key: 'unspecified-heart' },
     { relation: 'Mom', condition: 'Asthma', _key: 'mom-asthma' },
-    { relation: 'Mom', condition: 'Migraine', _key: 'mom-migraine' },
-    { relation: 'Dad', condition: 'Diabetes', _key: 'dad-diabetes' }
+    { relation: 'Mother', condition: 'Migraine', _key: 'mother-migraine' },
+    { relation: 'Brother', condition: 'Seizures', _key: 'brother-seizures' },
+    { relation: 'Maternal Grandmother', condition: 'Osteoporosis', _key: 'maternal-grandmother-osteoporosis' }
   ] });
   run('history'); run('records'); await settled();
   const profiles = [...document.querySelectorAll('#family .family-profile')];
-  assert.equal(profiles.length, 2);
-  const mom = profiles.find(profile => profile.querySelector('.family-profile-name').textContent === 'Mom');
-  const dad = profiles.find(profile => profile.querySelector('.family-profile-name').textContent === 'Dad');
-  assert.deepEqual([...mom.querySelectorAll('.family-condition h2')].map(node => node.textContent), ['Asthma', 'Migraine']);
+  assert.equal(profiles.length, 5);
+  assert.deepEqual(profiles.map(profile => profile.querySelector('.family-profile-name').textContent), [
+    'Mother', 'Father', 'Brother', 'Maternal Grandmother', 'Maternal grandparent (unspecified)'
+  ]);
+  const mother = profiles[0];
+  const dad = profiles[1];
+  assert.deepEqual([...mother.querySelectorAll('.family-condition h2')].map(node => node.textContent), ['Asthma', 'Migraine']);
   assert.deepEqual([...dad.querySelectorAll('.family-condition h2')].map(node => node.textContent), ['Diabetes']);
-  assert.equal(mom.querySelectorAll('.family-condition .edit-record').length, 2);
-  assert.equal(mom.querySelectorAll('.family-condition .family-delete').length, 2);
-  assert.equal([...mom.querySelectorAll('.family-profile-content button')].at(-1).textContent, 'Add condition');
+  assert.equal(mother.querySelectorAll('.family-condition .edit-record').length, 2);
+  assert.equal(mother.querySelectorAll('.family-condition .family-delete').length, 2);
+  assert.equal([...mother.querySelectorAll('.family-profile-content button')].at(-1).textContent, 'Add condition');
+  assert.ok(mother.querySelector('.family-move').textContent.includes('Move to another member'));
 });
 
 for (const [table, section, selector] of [['diagnoses', 'history', '.history-entry'], ['medications', 'medications', '.medication-row']]) {
@@ -155,6 +162,22 @@ test('Adding a family history item from a profile keeps that relative preselecte
   await settled();
   assert.equal(env.requests.at(-1).url, '/api/preparation/entries/family_history');
   assert.deepEqual(env.requests.at(-1).body, { fields: { relation: 'Mom', condition: '' }, notes: '' });
+});
+
+test('Moving a family history condition changes its relative and preserves edits and notes', async () => {
+  const env = editorEnvironment();
+  const { chart } = env;
+  await chart.preparation.moveFamilyRow({
+    _key: 'source-condition', relation: 'Maternal grandparent (unspecified)', condition: 'Arrhythmia',
+    _original: { relation: 'Maternal grandparent (unspecified)', condition: 'Heart condition' },
+    _patient_note: 'Confirmed with family'
+  }, 'Mother');
+  assert.deepEqual(env.requests[0], {
+    url: '/api/preparation/entries/family_history/source-condition', method: 'PUT',
+    body: { fields: { relation: 'Mother', condition: 'Arrhythmia' }, notes: 'Confirmed with family' }
+  });
+  assert.equal(env.toast, 'Condition moved to Mother.');
+  assert.equal(env.refreshes, 1);
 });
 
 test('Deleted entries can be restored in Prepare and remain unavailable in Provider mode', async () => {

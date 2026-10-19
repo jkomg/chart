@@ -316,6 +316,10 @@ body[data-mode=provider] .sidebar-bottom form{display:none}
 .family-condition .eyebrow{margin:0;font-size:9px}
 .family-condition .source-link,.family-condition .patient-label,.family-condition .patient-text,.family-condition .edit-record{grid-column:1}
 .family-condition .family-delete{grid-column:2;grid-row:1 / span 5;align-self:center;color:#9a625a}
+.family-move{grid-column:1;font-size:11px;color:var(--teal)}
+.family-move summary{cursor:pointer;font-weight:600;width:max-content}
+.family-move select{display:block;max-width:100%;margin:10px 0;border:1px solid #c8d8d0;border-radius:8px;background:#fff;padding:9px 10px;color:#33474b;font-size:12px}
+.family-move-error{display:block;color:#a34d43;font-size:11px;margin-top:7px}
 .family-profile-content>.outline-button{margin-top:15px}
 .family-empty{padding:18px 0;color:var(--muted);font-size:13px}
 @media(max-width:620px){.family-profile-summary{padding:13px 14px}.family-profile-content{padding:0 14px 14px}.family-condition{gap:8px}.family-profile-count{font-size:10px}}
