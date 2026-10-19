@@ -14,8 +14,8 @@ FIELDS = {
     'clinical_genetics': (),
     'genetic_findings': (),
     'documents': (),
-    'measurements': (),
-    'cycles': (),
+    'measurements': ('metric', 'taken_at', 'value'),
+    'cycles': ('start', 'end'),
 }
 REQUIRED = {'diagnoses': 'name', 'allergies': 'substance', 'events': 'title', 'medications': 'name', 'family_history': 'relation'}
 
@@ -69,6 +69,19 @@ def apply_table(table, rows, updates):
         row['_key'] = key
         update = updates.get(key)
         (deleted if update and update.get('deleted') else visible).append(row)
+    return visible, deleted
+
+
+def apply_row_updates(table, rows, updates):
+    visible, deleted = apply_table(table, rows, updates)
+    for row in visible + deleted:
+        update = updates.get(row['_key'], {})
+        fields = update.get('fields', {})
+        if fields or update.get('notes'):
+            row['_original'] = {k: row.get(k) for k in FIELDS[table]}
+            row.update(fields)
+            row['_patient_note'] = update.get('notes', '')
+            row['_patient_updated'] = bool(fields)
     return visible, deleted
 
 
@@ -129,6 +142,18 @@ def validate_entry(table, body, manual=False):
                 raise ValueError('Non-canonical date')
         except ValueError:
             raise ValueError('Date must use YYYY-MM-DD') from None
+    for field in (('start', 'end') if table == 'cycles' else ('taken_at',) if table == 'measurements' else ()):
+        if fields.get(field):
+            from datetime import date
+            try:
+                date.fromisoformat(fields[field][:10])
+            except ValueError:
+                raise ValueError('Date must use YYYY-MM-DD') from None
+    if table == 'measurements' and 'value' in fields:
+        try:
+            float(fields['value'])
+        except ValueError:
+            raise ValueError('Reading must be a number') from None
     return {'fields': fields, 'notes': notes.strip()}
 
 
