@@ -503,13 +503,16 @@
   function cycleTable(cycles, withLength) {
     const lengthByStart = new Map(withLength.map(c => [c.start, c.length]));
     const wrap = el('div', { class: 'table-toggle' });
-    const button = el('button', { type: 'button', class: 'text-button', 'aria-expanded': 'false' }, 'Show periods as a table');
+    const button = el('button', { type: 'button', class: 'text-button', 'aria-expanded': 'false' }, chart.mode === 'owner' ? 'Edit period dates' : 'Show periods as a table');
+    document.addEventListener('chart:mode', () => {
+      button.textContent = holder.hidden ? (chart.mode === 'owner' ? 'Edit period dates' : 'Show periods as a table') : 'Hide table';
+    });
     const holder = el('div', { class: 'reading-table', hidden: '' });
     button.addEventListener('click', () => {
       const open = holder.hidden;
       holder.hidden = !open;
       button.setAttribute('aria-expanded', open);
-      button.textContent = open ? 'Hide table' : 'Show periods as a table';
+      button.textContent = open ? 'Hide table' : (chart.mode === 'owner' ? 'Edit period dates' : 'Show periods as a table');
       if (!open || holder.firstChild) return;
       const tbody = el('tbody');
     [...cycles].reverse().forEach(c => {
