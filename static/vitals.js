@@ -8,6 +8,7 @@
   const DAY = 86400000;
   const RANGES = { '1m': 30, '3m': 91, '6m': 182, '1y': 365, all: Infinity };
   const SOURCES = { apple_health: 'Apple Health', oura: 'Oura', pdf: 'Clinic record', manual: 'Entered by hand', lab: 'Lab report' };
+  const canViewSource = filename => chart.clinicalUI?.canViewSource(filename) ?? true;
   const CHARTS = [
     { key: 'blood_pressure', label: 'Blood pressure', unit: 'mmHg', series: ['bp_systolic', 'bp_diastolic'] },
     ...['resting_hr', 'weight', 'bmi', 'height', 'hrv_rmssd', 'hrv_sdnn', 'spo2', 'respiratory_rate', 'body_temp', 'temp_deviation', 'vo2max']
@@ -272,7 +273,7 @@
       tip.append(el('div', { class: 'tip-sub' }, fmtDate(new Date(t), { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })));
       tip.append(el('div', { class: 'tip-sub' }, SOURCES[p.source] || p.source));
       if (p.note && sameDay === 1) tip.append(el('div', { class: 'tip-sub' }, p.note));  // per-reading notes would only describe the first
-      if (p.doc) {
+      if (p.doc && canViewSource(p.doc)) {
         const link = el('button', { type: 'button', class: 'tip-link' }, `View source${p.page ? ` · page ${p.page}` : ''} →`);
         link.addEventListener('click', e => { e.stopPropagation(); chart.openDoc(p.doc, p.page); });
         tip.append(link);
@@ -383,7 +384,7 @@
     const tbody = el('tbody');
     [...byDate.values()].sort((a, b) => b.d - a.d || a.seq - b.seq).forEach(row => {
       const src = el('td', {}, SOURCES[row.src.source] || row.src.source);
-      if (row.src.doc) {
+      if (row.src.doc && canViewSource(row.src.doc)) {
         const b = el('button', { type: 'button', class: 'text-button' }, ` · page ${row.src.page || 1} →`);
         b.addEventListener('click', () => chart.openDoc(row.src.doc, row.src.page));
         src.append(b);
@@ -470,7 +471,7 @@
         tip.replaceChildren(el('div', { class: 'tip-row' }, el('strong', {}, days ? `${days} days` : 'Start only')),
           el('div', { class: 'tip-sub' }, `${fmtDate(c.s)}${c.e ? ` – ${fmtDate(c.e, { month: 'short', day: 'numeric' })}` : ''}`),
           el('div', { class: 'tip-sub' }, SOURCES[c.source] || c.source));
-        if (c.doc) {
+        if (c.doc && canViewSource(c.doc)) {
           const link = el('button', { type: 'button', class: 'tip-link' }, `View source${c.page ? ` · page ${c.page}` : ''} →`);
           link.addEventListener('click', ev => { ev.stopPropagation(); chart.openDoc(c.doc, c.page); });
           tip.append(link);

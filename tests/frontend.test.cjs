@@ -15,7 +15,9 @@ function environment(data = {}) {
     for (const kid of kids) if (kid != null) node.append(kid);
     return node;
   };
-  const chart = { openDoc() {}, renderLabs() {} };
+  const openedSources = [];
+  const chart = { mode: 'owner', openDoc: (document, page) => openedSources.push([document, page]), renderLabs() {} };
+  const includedSources = new Set(data.includedSources || []);
   const clinical = { documents: [], events: [], diagnoses: [], allergies: [], medications: [], family_history: [], clinical_genetics: [], lab_results: [], ...data };
   const context = vm.createContext({ document, window, chart,
     fetch: async url => ({ ok: true, json: async () => url === '/api/genetics' ? { findings: [], sources: [] } : clinical })
@@ -26,13 +28,19 @@ function environment(data = {}) {
   run('record-groups');
   chart.preparation = {
     renderDeleted() {},
+    isSourceIncluded: filename => includedSources.has(filename),
+    canViewSource: filename => chart.mode !== 'provider' || includedSources.has(filename),
+    setSourceIncluded: async (filename, included) => {
+      included ? includedSources.add(filename) : includedSources.delete(filename);
+      document.dispatchEvent(new window.Event('chart:sourceSelection'));
+    },
     addButton: (_table, label = 'Add') => el('button', {}, label),
     decorate: (container, table, row) => {
       if (row._manual) container.append(el('p', { class: 'patient-label' }, 'Patient-entered'));
       container.append(el('button', { 'data-key': row._key, class: 'edit-record' }, 'Edit / add notes'));
     }
   };
-  return { chart, document, run, context, window };
+  return { chart, document, run, context, window, openedSources };
 }
 const settled = () => new Promise(resolve => setImmediate(resolve));
 
@@ -56,11 +64,45 @@ test('Documents and Genetics retain preparation content during initial and repea
   }
 });
 
+test('Provider view shows only flagged source documents and Prepare can select them', async () => {
+  const { chart, document, run, window, openedSources } = environment({
+    documents: [
+      { document: 'selected.pdf', title: 'Selected report' },
+      { document: 'unselected.pdf', title: 'Unselected report' }
+    ],
+    medications: [{ name: 'Sample medicine', document: 'unselected.pdf', _key: 'medicine' }]
+  });
+  run('history'); run('records'); await settled();
+  const docs = [...document.querySelectorAll('#documents .document-entry')];
+  assert.equal(docs.length, 2);
+  assert.equal(docs.find(entry => entry.dataset.providerDocument === 'unselected.pdf').querySelector('.source-inclusion input').checked, false);
+  const checkbox = docs.find(entry => entry.dataset.providerDocument === 'unselected.pdf').querySelector('.source-inclusion input');
+  chart.mode = 'provider';
+  document.dispatchEvent(new window.Event('chart:mode'));
+  assert.equal(docs.every(entry => entry.hidden), true);
+  assert.equal(document.querySelector('.provider-sources-empty').hidden, false);
+  chart.mode = 'owner';
+  document.dispatchEvent(new window.Event('chart:mode'));
+  checkbox.checked = true;
+  checkbox.dispatchEvent(new window.Event('change'));
+  await settled();
+  chart.mode = 'provider';
+  document.dispatchEvent(new window.Event('chart:mode'));
+  assert.equal(docs.find(entry => entry.dataset.providerDocument === 'selected.pdf').hidden, true);
+  assert.equal(docs.find(entry => entry.dataset.providerDocument === 'unselected.pdf').hidden, false);
+  assert.equal(document.querySelector('#medications .source-link').classList.contains('owner-only'), false);
+  assert.equal(chart.clinicalUI.canViewSource('unselected.pdf'), true);
+  chart.clinicalUI.sourceButton('selected.pdf').click();
+  assert.deepEqual(openedSources, []);
+  chart.clinicalUI.sourceButton('unselected.pdf', 3).click();
+  assert.deepEqual(openedSources, [['unselected.pdf', 3]]);
+});
+
 test('Family history renders one expandable profile per relative with their own conditions', async () => {
   const { document, run } = environment({ family_history: [
     { relation: 'Dad', condition: 'Diabetes', _key: 'dad-diabetes' },
     { relation: 'Maternal grandparent (unspecified)', condition: 'Heart disease', _key: 'unspecified-heart' },
-    { relation: 'Mom', condition: 'Asthma', _key: 'mom-asthma' },
+    { relation: 'Mom', condition: 'Asthma', document: 'family.pdf', _key: 'mom-asthma' },
     { relation: 'Mother', condition: 'Migraine', _key: 'mother-migraine' },
     { relation: 'Brother', condition: 'Seizures', _key: 'brother-seizures' },
     { relation: 'Maternal Grandmother', condition: 'Osteoporosis', _key: 'maternal-grandmother-osteoporosis' }
@@ -77,6 +119,7 @@ test('Family history renders one expandable profile per relative with their own 
   assert.deepEqual([...dad.querySelectorAll('.family-condition h2')].map(node => node.textContent), ['Diabetes']);
   assert.equal(mother.querySelectorAll('.family-condition .edit-record').length, 2);
   assert.equal(mother.querySelectorAll('.family-condition .family-delete').length, 2);
+  assert.equal(mother.querySelectorAll('.source-link').length, 0);
   assert.equal([...mother.querySelectorAll('.family-profile-content button')].at(-1).textContent, 'Add condition');
   assert.ok(mother.querySelector('.family-move').textContent.includes('Move to another member'));
 });

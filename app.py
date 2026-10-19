@@ -236,6 +236,24 @@ def preparation_api():
     return jsonify(preparation.load(get_db(), session['user']))
 
 
+@app.put('/api/preparation/sources')
+def preparation_source():
+    if not session.get('user'):
+        return jsonify({'error': 'unauthorized'}), 401
+    body = request.get_json(silent=True) if request.is_json else None
+    if not isinstance(body, dict) or set(body) != {'document', 'included'}:
+        return jsonify({'error': 'Provide a document filename and inclusion flag'}), 400
+    filename = body['document']
+    if (not isinstance(filename, str) or not filename or len(filename) > 500
+            or Path(filename).name != filename or '\\' in filename or not filename.lower().endswith('.pdf')):
+        return jsonify({'error': 'Choose a valid PDF filename'}), 400
+    if type(body['included']) is not bool:
+        return jsonify({'error': 'The inclusion flag must be true or false'}), 400
+    update = {'included': body['included']}
+    preparation.save(get_db(), session['user'], 'source:' + filename, update)
+    return jsonify({'document': filename, **update})
+
+
 @app.put('/api/preparation/sections/<section>')
 def preparation_section(section):
     if not session.get('user'):

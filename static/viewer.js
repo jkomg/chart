@@ -16,6 +16,11 @@ async function loadPdfjs() {
 }
 
 async function open({ file, page }) {
+  if (chart.mode === 'provider' && !chart.preparation?.isSourceIncluded(file)) {
+    close();
+    chart.go(chart.lastTab || 'goals');
+    return;
+  }
   const sameDoc = current && current.file === file;
   viewer.hidden = false;
   document.body.classList.add('viewer-open');
@@ -123,6 +128,11 @@ window.addEventListener('hashchange', e => { if (e.newURL.includes('#doc/') && !
 
 document.addEventListener('chart:doc', e => {
   if (e.detail) open(e.detail); else { close(); openedInApp = false; zoom = 1; }
+});
+document.addEventListener('chart:mode', e => {
+  if (e.detail === 'provider' && current && !chart.preparation?.isSourceIncluded(current.file)) {
+    close(); chart.go(chart.lastTab || 'goals');
+  }
 });
 // The router ran before this module loaded; pick up a #doc/ link opened directly.
 if (location.hash.startsWith('#doc/')) {
