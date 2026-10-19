@@ -64,7 +64,7 @@
       const content = profile.querySelector('.family-profile-content');
       for (const row of rows) {
         const item = el('article', { class: 'family-condition' },
-          el('div', {}, el('p', { class: 'eyebrow' }, 'Family history'), el('h2', {}, row.condition || 'No condition details recorded')));
+          el('div', {}, el('h2', {}, row.condition || 'No condition details recorded')));
         chart.preparation.decorate(item, 'family_history', row);
         const move = el('details', { class: 'family-move owner-only' }, el('summary', {}, 'Move to another member'));
         const target = el('select', { 'aria-label': `Move ${row.condition || 'family history item'} to another member` });

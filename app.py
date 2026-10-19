@@ -89,8 +89,17 @@ def check_password(password: str, stored: str) -> bool:
 def load_records(user: str) -> dict:
     row = get_db().execute("SELECT data FROM user_records WHERE username = ?", (user,)).fetchone()
     records = json.loads(row[0]) if row else copy.deepcopy(DEFAULT_RECORDS)
-    if "items" not in records.get("goals", {}):
-        records["goals"] = copy.deepcopy(DEFAULT_RECORDS["goals"])  # the old starter shape had only placeholder text
+    goals = records.get("goals") if isinstance(records.get("goals"), dict) else {}
+    items = goals.get("items", [])
+    normalized = []
+    if isinstance(items, list):
+        for index, item in enumerate(items, 1):
+            if isinstance(item, str):
+                normalized.append({"priority": index, "doing": "", "goal": item, "direction": ""})
+            elif isinstance(item, dict):
+                normalized.append({"priority": index, "doing": item.get("doing", ""), "goal": item.get("goal", ""), "direction": item.get("direction", "")})
+    questions = goals.get("questions", [])
+    records["goals"] = {"items": normalized, "questions": questions if isinstance(questions, list) else []}
     return records
 
 
@@ -168,7 +177,21 @@ def goals_api():
     # JSON only: a cross-site form can't send it, so this doubles as CSRF protection.
     body = request.get_json(silent=True) if request.is_json else None
     goals = {}
-    for key in ("items", "questions"):
+    if not isinstance(body, dict):
+        return jsonify({"error": "Provide visit priorities and questions"}), 400
+    values = body.get("items")
+    if not isinstance(values, list) or len(values) > 100:
+        return jsonify({"error": "items must be a list of up to 100 priorities"}), 400
+    goals["items"] = []
+    for index, item in enumerate(values, 1):
+        if isinstance(item, str):  # accept old clients while converting their goals
+            item = {"doing": "", "goal": item, "direction": ""}
+        if not isinstance(item, dict) or set(item) - {"priority", "doing", "goal", "direction"}:
+            return jsonify({"error": "Each priority needs what is being done, a goal, and clinical direction"}), 400
+        if any(not isinstance(item.get(field, ""), str) or len(item.get(field, "")) > 5000 for field in ("doing", "goal", "direction")):
+            return jsonify({"error": "Priority details must be text up to 5,000 characters each"}), 400
+        goals["items"].append({"priority": index, "doing": item.get("doing", "").strip(), "goal": item.get("goal", "").strip(), "direction": item.get("direction", "").strip()})
+    for key in ("questions",):
         values = (body or {}).get(key)
         if not isinstance(values, list) or len(values) > 100 or not all(isinstance(v, str) and len(v) <= 2000 for v in values):
             return jsonify({"error": f"{key} must be a list of strings"}), 400

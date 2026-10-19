@@ -85,9 +85,11 @@ editor and upload controls. **Present to provider** starts the presentation at v
 signed-in account, not a separate login or access restriction. The selected view is
 remembered per account for the current browser tab/session.
 
-The first six goals, in saved order, are the visit priorities. In Prepare, use the
-arrows to reorder goals or **Make priority** to move an additional goal into the
-sixth position. Remaining goals stay available under **Additional goals**.
+Visit priorities are ordered and numbered. Each priority has space for what is
+being done, the goal, and the clinical direction requested. In Prepare, use the
+arrows to change their order. Provider view shows the first six priorities and
+keeps any remaining items under **Additional priorities**. Older one-line goals
+are preserved as the goal field when the chart loads.
 
 Labs separate a defined set of common tests from other testing. Categories collapse;
 search includes collapsed categories and reported test names, and reveals matching
