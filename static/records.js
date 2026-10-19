@@ -56,12 +56,12 @@
       const conditions = rows.filter(row => row.condition?.trim());
       const profile = el('details', { class: 'family-profile' },
         el('summary', { class: 'family-profile-summary' },
-          el('span', { class: 'profile-avatar' }, relation.slice(0, 1).toUpperCase()),
           el('span', { class: 'family-profile-name' }, relation),
           el('span', { class: 'family-profile-count' }, `${conditions.length} ${conditions.length === 1 ? 'condition' : 'conditions'}`),
           el('span', { class: 'family-profile-chevron', 'aria-hidden': 'true' }, '⌄')),
         el('div', { class: 'family-profile-content' }));
       const content = profile.querySelector('.family-profile-content');
+      profile.insertBefore(chart.preparation.familyMemberDetails(relation), content);
       for (const row of rows) {
         const item = el('article', { class: 'family-condition' },
           el('div', {}, el('h2', {}, row.condition || 'No condition details recorded')));

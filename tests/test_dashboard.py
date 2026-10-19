@@ -119,6 +119,21 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(self.client.put('/api/preparation/sections/history', json=payload).status_code, 401)
         self.assertEqual(self.client.get('/api/preparation').status_code, 401)
 
+    def test_family_member_details_are_validated_and_account_scoped(self):
+        url = '/api/preparation/family-members'
+        payload = {'relation': 'Mother', 'fields': {'dob': '1970-02-03', 'deceased': True, 'date_of_death': '2024-01-09'}}
+        self.assertEqual(self.client.put(url, json=payload).json, {'relation': 'Mother', **payload['fields']})
+        self.assertEqual(self.client.get('/api/preparation').json['family_member:mother'], payload['fields'])
+        for invalid in [
+            {'relation': 'Mother', 'fields': {'dob': '03/02/1970'}},
+            {'relation': 'Mother', 'fields': {'deceased': 'yes'}},
+            {'relation': 'Mother', 'fields': {'other': 'value'}},
+        ]:
+            self.assertEqual(self.client.put(url, json=invalid).status_code, 400)
+        with self.client.session_transaction() as session:
+            session['user'] = 'sample-b'
+        self.assertEqual(self.client.get('/api/preparation').json, {})
+
     def test_provider_source_selection_is_validated_and_account_scoped(self):
         url = '/api/preparation/sources'
         self.assertEqual(self.client.put(url, json={'document': 'visit.pdf', 'included': True}).json,

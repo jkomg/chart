@@ -346,6 +346,38 @@ def preparation_source():
     return jsonify({'document': filename, **update})
 
 
+@app.put('/api/preparation/family-members')
+def preparation_family_member():
+    if not session.get('user'):
+        return jsonify({'error': 'unauthorized'}), 401
+    body = request.get_json(silent=True) if request.is_json else None
+    if not isinstance(body, dict) or set(body) != {'relation', 'fields'}:
+        return jsonify({'error': 'Provide a family member and their details'}), 400
+    relation, fields = body['relation'], body['fields']
+    if not isinstance(relation, str) or not relation.strip() or len(relation) > 100:
+        return jsonify({'error': 'Choose a valid family member'}), 400
+    if not isinstance(fields, dict) or set(fields) - {'dob', 'deceased', 'date_of_death'}:
+        return jsonify({'error': 'Unsupported family member details'}), 400
+    dob, death_date = fields.get('dob', ''), fields.get('date_of_death', '')
+    if not isinstance(dob, str) or not isinstance(death_date, str) or len(dob) > 10 or len(death_date) > 10:
+        return jsonify({'error': 'Dates must use YYYY-MM-DD'}), 400
+    from datetime import date
+    for value in (dob, death_date):
+        if value:
+            try:
+                if date.fromisoformat(value).isoformat() != value:
+                    raise ValueError
+            except ValueError:
+                return jsonify({'error': 'Dates must use YYYY-MM-DD'}), 400
+    if type(fields.get('deceased', False)) is not bool:
+        return jsonify({'error': 'Deceased must be true or false'}), 400
+    slug = ''.join(c.lower() if c.isalnum() else '_' for c in relation.strip()).strip('_')
+    slug = '_'.join(part for part in slug.split('_') if part)
+    details = {'dob': dob, 'deceased': fields.get('deceased', False), 'date_of_death': death_date}
+    preparation.save(get_db(), session['user'], 'family_member:' + slug, details)
+    return jsonify({'relation': relation.strip(), **details})
+
+
 @app.put('/api/preparation/sections/<section>')
 def preparation_section(section):
     if not session.get('user'):
