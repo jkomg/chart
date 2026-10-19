@@ -192,6 +192,19 @@
     await refreshRecords(`Condition moved to ${relation}.`);
   };
   const decorate = (container, table, row) => {
+    if (table === 'family_history') {
+      if (row._manual) container.append(el('p', { class: 'patient-label' }, 'Patient-entered'));
+      if (row._patient_updated || row._patient_note) {
+        const update = el('details', { class: 'family-patient-update' },
+          el('summary', {}, row._patient_updated ? 'Patient update' : 'Patient note'));
+        if (row._patient_note) update.append(el('p', {}, row._patient_note));
+        container.append(update);
+      }
+      const edit = el('button', { type: 'button', class: 'text-button owner-only edit-record' }, 'Edit / add notes');
+      edit.addEventListener('click', () => editRecord(table, row));
+      container.append(edit);
+      return container;
+    }
     if (row._manual || row._patient_updated || row._patient_note) {
       container.append(el('p', { class: 'patient-label' }, row._manual ? 'Patient-entered' : row._patient_updated ? 'Patient update' : 'Patient note'));
       if (row._patient_note) container.append(el('p', { class: 'patient-text' }, row._patient_note));
