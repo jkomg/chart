@@ -7,7 +7,7 @@
   const SVG = 'http://www.w3.org/2000/svg';
   const DAY = 86400000;
   const RANGES = { '1m': 30, '3m': 91, '6m': 182, '1y': 365, all: Infinity };
-  const SOURCES = { apple_health: 'Apple Health', oura: 'Oura', pdf: 'Clinic record', manual: 'Entered by hand', lab: 'Lab report' };
+  const SOURCES = { apple_health: 'Apple Health', oura: 'Oura', pdf: 'Clinic record', manual: 'Entered by hand', lab: 'Lab report', period_tracker: 'Period tracker backup' };
   const canViewSource = filename => chart.clinicalUI?.canViewSource(filename) ?? true;
   const CHARTS = [
     { key: 'blood_pressure', label: 'Blood pressure', unit: 'mmHg', series: ['bp_systolic', 'bp_diastolic'] },
