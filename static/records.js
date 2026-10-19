@@ -122,7 +122,9 @@
         el('div', { class: 'record-copy' },
           el('div', { class: 'record-title' }, el('b', {}, d.title || d.document), chip(KINDS[d.kind] || 'Document')),
           el('p', { class: 'vital-meta' }, [day(d.date), d.provider, d.clinician].filter(Boolean).join(' · ')),
-          d.summary ? el('p', { class: 'record-summary' }, d.summary) : null),
+          d.summary ? el('div', { class: 'record-summary-block' },
+            el('span', { class: 'record-summary-label' }, 'At a glance'),
+            el('p', { class: 'record-summary' }, d.summary)) : null),
         el('span', { class: 'record-arrow' }, '→'));
       const entry = el('article', { class: 'document-entry' }, row);
       entry.dataset.providerDocument = d.document;

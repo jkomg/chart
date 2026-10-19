@@ -78,7 +78,7 @@ test('Visit priorities show and save the three structured details with an explic
 
 test('Documents and Genetics retain preparation content during initial and repeated rendering', async () => {
   const { chart, document, run } = environment({
-    documents: [{ document: 'sample.pdf', title: 'Sample report', date: '2025-01-01', kind: 'genetic' }],
+    documents: [{ document: 'sample.pdf', title: 'Sample report', date: '2025-01-01', kind: 'genetic', summary: 'The report describes the test findings and recommended follow-up.' }],
     clinical_genetics: [{ document: 'sample.pdf', test: 'Sample genetic test', gene: 'EXAMPLE', page: 2 }]
   });
   const hosts = ['documents', 'genetics'].map(id => document.querySelector(`#${id} .preparation-section`));
@@ -90,6 +90,10 @@ test('Documents and Genetics retain preparation content during initial and repea
       assert.ok(document.querySelector(`#${id} .preparation-section`) === hosts[i], `${id} keeps the original preparation host`);
       assert.equal(hosts[i].querySelector('textarea').value, `Unsaved ${id} draft`);
       assert.ok(document.querySelector(`#${id} .data-body`).textContent.includes(id === 'documents' ? 'Sample report' : 'EXAMPLE'));
+      if (id === 'documents') {
+        assert.equal(document.querySelector('.record-summary-label').textContent, 'At a glance');
+        assert.equal(document.querySelector('.record-summary').textContent, 'The report describes the test findings and recommended follow-up.');
+      }
     }
     await chart.reloadClinical();
     await settled();
