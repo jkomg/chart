@@ -360,8 +360,7 @@ body[data-mode=provider] .sidebar-bottom form{display:none}
 .family-profile-summary{display:flex;align-items:center;gap:13px;min-height:78px;padding:15px 19px;cursor:pointer;list-style:none}
 .family-profile-summary::-webkit-details-marker{display:none}
 .family-profile-summary:focus-visible{outline:2px solid var(--teal);outline-offset:-3px}
-.family-profile-summary .profile-avatar{width:42px;height:42px;font-size:14px;flex:0 0 auto}
-.family-profile-name{font:400 20px 'Libre Baskerville',serif;color:#2d4147}
+.family-profile-name{font:400 20px 'Libre Baskerville',serif;color:var(--teal)}
 .family-profile-count{margin-left:auto;color:var(--muted);font-size:11px}
 .family-profile-chevron{color:#80928c;transition:transform .18s}
 .family-profile[open] .family-profile-chevron{transform:rotate(180deg)}

@@ -56,7 +56,6 @@
       const conditions = rows.filter(row => row.condition?.trim());
       const profile = el('details', { class: 'family-profile' },
         el('summary', { class: 'family-profile-summary' },
-          el('span', { class: 'profile-avatar' }, relation.slice(0, 1).toUpperCase()),
           el('span', { class: 'family-profile-name' }, relation),
           el('span', { class: 'family-profile-count' }, `${conditions.length} ${conditions.length === 1 ? 'condition' : 'conditions'}`),
           el('span', { class: 'family-profile-chevron', 'aria-hidden': 'true' }, '⌄')),

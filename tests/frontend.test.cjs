@@ -187,6 +187,7 @@ test('Family history renders one expandable profile per relative with their own 
   ]);
   const mother = profiles[0];
   const dad = profiles[1];
+  assert.equal(mother.querySelector('.profile-avatar'), null, 'the relative name replaces the initial badge');
   assert.deepEqual([...mother.querySelectorAll('.family-condition h2')].map(node => node.textContent), ['Asthma', 'Migraine']);
   assert.deepEqual([...dad.querySelectorAll('.family-condition h2')].map(node => node.textContent), ['Diabetes']);
   assert.equal(mother.querySelectorAll('.family-condition .edit-record').length, 2);
