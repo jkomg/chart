@@ -393,8 +393,19 @@
       const remove = el('button', { type: 'button', class: 'text-button owner-only' }, 'Delete result');
       remove.addEventListener('click', () => chart.preparation.deleteRow('measurements', { sources: row.keys.map(_key => ({ _key })) }, chart.reloadVitals));
       action.append(remove);
-      tbody.append(el('tr', {}, el('td', {}, fmtDate(row.d)),
-        ...lines.map((_, i) => el('td', { class: 'num' }, row.values[i] == null ? '—' : fmt(row.values[i], decimals))), src, action));
+      const valueCells = lines.map((line, i) => {
+        const cell = el('td', { class: 'num' }, row.values[i] == null ? '—' : fmt(row.values[i], decimals));
+        const point = line.points.find(p => p.t.slice(0, 10) === row.d.toISOString().slice(0, 10) && (p.seq || 0) === row.seq);
+        if (point) {
+          const edit = el('button', { type: 'button', class: 'text-button owner-only' }, 'Edit');
+          edit.addEventListener('click', () => chart.preparation.editRecord('measurements', {
+            ...point, metric: line.key, taken_at: point.t, value: String(point.v), _key: point._key,
+          }));
+          cell.append(edit);
+        }
+        return cell;
+      });
+      tbody.append(el('tr', {}, el('td', {}, fmtDate(row.d)), ...valueCells, src, action));
     });
     table.append(tbody);
     return table;
@@ -502,12 +513,17 @@
       if (!open || holder.firstChild) return;
       const tbody = el('tbody');
     [...cycles].reverse().forEach(c => {
+      const actions = el('td', {});
+      const edit = el('button', { type: 'button', class: 'text-button owner-only' }, 'Edit');
+      edit.addEventListener('click', () => chart.preparation.editRecord('cycles', c));
+      actions.append(edit);
       const remove = el('button', { type: 'button', class: 'text-button owner-only' }, 'Delete');
       remove.addEventListener('click', () => chart.preparation.deleteRow('cycles', c, chart.reloadVitals));
+      actions.append(remove);
       tbody.append(el('tr', {},
         el('td', {}, fmtDate(c.s)), el('td', {}, c.e ? fmtDate(c.e) : '—'),
         el('td', { class: 'num' }, c.e ? String(Math.round((c.e - c.s) / DAY) + 1) : '—'),
-        el('td', { class: 'num' }, lengthByStart.has(c.start) ? String(lengthByStart.get(c.start)) : '—'), el('td', {}, remove)));
+        el('td', { class: 'num' }, lengthByStart.has(c.start) ? String(lengthByStart.get(c.start)) : '—'), actions));
     });
       holder.append(el('table', {}, el('thead', {}, el('tr', {}, el('th', {}, 'Started'), el('th', {}, 'Ended'),
         el('th', { class: 'num' }, 'Period days'), el('th', { class: 'num' }, 'Cycle length'))), tbody));

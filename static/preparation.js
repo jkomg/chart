@@ -8,9 +8,11 @@
     events: { title: 'Event or procedure', type: 'Type', date: 'Date', detail: 'Details' },
     medications: { name: 'Medication', dose: 'Dose', schedule: 'Schedule', context: 'Status / context', date: 'Date confirmed' },
     family_history: { relation: 'Relation', condition: 'Condition' },
-    lab_results: {}
+    lab_results: {},
+    measurements: { metric: 'Measurement', taken_at: 'Date', value: 'Value' },
+    cycles: { start: 'Period started', end: 'Period ended' }
   };
-  const titles = { diagnoses: 'condition', allergies: 'allergy', events: 'event or procedure', medications: 'medication', family_history: 'family history', lab_results: 'lab note', clinical_genetics: 'genetic finding', genetic_findings: 'consumer genetic finding', documents: 'medical record' };
+  const titles = { diagnoses: 'condition', allergies: 'allergy', events: 'event or procedure', medications: 'medication', family_history: 'family history', lab_results: 'lab note', clinical_genetics: 'genetic finding', genetic_findings: 'consumer genetic finding', documents: 'medical record', measurements: 'vital reading', cycles: 'period dates' };
   let modalDirty = false;
   const dirtySections = new Set();
   let deletedState = {};
@@ -80,10 +82,10 @@
     else modalDirty = false;
   });
   const recordKeys = row => row.sources?.length ? row.sources.map(source => source._key) : [row._key];
-  async function refreshRecords(message = 'Patient update saved.') {
+  async function refreshRecords(message = 'Patient update saved.', table = '') {
     modalDirty = false;
     dialog.close();
-    const refreshed = await chart.reloadClinical();
+    const refreshed = ['measurements', 'cycles'].includes(table) ? await chart.reloadVitals() : await chart.reloadClinical();
     chart.toast(refreshed ? message : 'Saved. Reload to refresh your records.');
   }
   function editRecord(table, row, defaults = {}) {
@@ -133,7 +135,7 @@
         controls.forEach(control => { control.disabled = true; });
         try {
           await write('/api/preparation/entries/' + table, 'PATCH', { keys: recordKeys(row), deleted: true });
-          await refreshRecords('Entry deleted.');
+          await refreshRecords('Entry deleted.', table);
         } catch (failure) { error.textContent = failure.message; controls.forEach(control => { control.disabled = false; }); }
       });
       actions.append(remove);
@@ -144,7 +146,7 @@
         if (chart.mode !== 'owner' || !confirm('Remove your update and notes, and show the original record?')) return;
         const controls = [...form.querySelectorAll('button, input, textarea, select')];
         controls.forEach(control => { control.disabled = true; });
-        try { await write(url, 'DELETE'); await refreshRecords(); }
+        try { await write(url, 'DELETE'); await refreshRecords('Patient update removed.', table); }
         catch (failure) { error.textContent = failure.message; controls.forEach(control => { control.disabled = false; }); }
       });
       actions.append(reset);
@@ -162,7 +164,7 @@
       }
       const controls = [...form.querySelectorAll('button, input, textarea, select')];
       controls.forEach(control => { control.disabled = true; });
-      try { await write(url, row ? 'PUT' : 'POST', { fields, notes: notes.value }); await refreshRecords(); }
+      try { await write(url, row ? 'PUT' : 'POST', { fields, notes: notes.value }); await refreshRecords('Patient update saved.', table); }
       catch (failure) { error.textContent = failure.message; controls.forEach(control => { control.disabled = false; }); }
     });
     dialog.append(form); modalDirty = false; dialog.showModal();
@@ -256,6 +258,6 @@
       document.getElementById(id).append(panel);
     }
   };
-  chart.preparation = { decorate, addButton, renderDeleted, deleteRow, moveFamilyRow, isSourceIncluded, canViewSource, setSourceIncluded };
+  chart.preparation = { editRecord, decorate, addButton, renderDeleted, deleteRow, moveFamilyRow, isSourceIncluded, canViewSource, setSourceIncluded };
   document.addEventListener('chart:mode', () => { if (chart.mode === 'provider') { dialog.close(); modalDirty = false; } });
 })();

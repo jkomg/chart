@@ -188,17 +188,21 @@ def vitals_api():
     data = vitals.load_vitals(conn, user)
     data['deleted_entries'] = {}
     for table, rows in preparation.vital_rows(data).items():
-        visible, deleted = preparation.apply_table(table, rows, updates)
+        visible, deleted = preparation.apply_row_updates(table, rows, updates)
         preparation_rows = []
         for key, update in updates.items():
             if key.startswith(table + ':manual:'):
-                preparation_rows.append({**update['fields'], '_key': key, '_manual': True, '_patient_note': update['notes']})
+                preparation_rows.append({**update.get('fields', {}), '_key': key, '_manual': True, '_patient_note': update.get('notes', '')})
         data['deleted_entries'][table] = deleted + [r for r in preparation_rows if updates[r['_key']].get('deleted')]
         data['visible_' + table] = visible + [r for r in preparation_rows if not updates[r['_key']].get('deleted')]
     data['series'] = {}
     for row in data.pop('visible_measurements'):
         if row.get('metric') in data['metrics']:
-            data['series'].setdefault(row['metric'], []).append({'t': row['taken_at'], 'v': row['value'], 'source': row['source'], 'doc': row['doc'], 'page': row['page'], 'note': row['note'], 'seq': row['seq'], '_key': row['_key']})
+            try:
+                value = float(row['value'])
+            except (TypeError, ValueError):
+                continue
+            data['series'].setdefault(row['metric'], []).append({'t': row['taken_at'], 'v': value, 'source': row.get('source'), 'doc': row.get('doc'), 'page': row.get('page'), 'note': row.get('note'), 'seq': row.get('seq'), '_key': row['_key'], '_original': row.get('_original'), '_patient_note': row.get('_patient_note'), '_patient_updated': row.get('_patient_updated')})
     data['cycles'] = [{**r, 'start': r['start'], 'end': r['end']} for r in data.pop('visible_cycles')]
     return jsonify(data)
 

@@ -1,5 +1,6 @@
 """Regression checks for appointment views and account-scoped records, with synthetic data."""
 from pathlib import Path
+from copy import deepcopy
 import sqlite3
 import tempfile
 import unittest
@@ -141,6 +142,28 @@ class DashboardTests(unittest.TestCase):
             session['user'] = 'sample-a'
         self.assertEqual(self.client.delete(url).status_code, 200)
         self.assertEqual(self.client.get('/api/clinical').json['diagnoses'][0]['status'], 'history')
+
+    def test_prepare_can_correct_cycle_dates_and_vital_reading_values(self):
+        sample = {
+            'series': {'resting_hr': [{'t': '2025-01-02', 'v': 60, 'source': 'manual', 'doc': None, 'page': None, 'note': None, 'seq': 0}]},
+            'cycles': [{'start': '2025-01-01', 'end': '2025-01-04', 'source': 'manual', 'doc': None, 'page': None, 'note': None}],
+            'metrics': {'resting_hr': {'label': 'Resting heart rate', 'unit': 'bpm', 'decimals': 0}},
+        }
+        with patch.object(app.vitals, 'load_vitals', side_effect=lambda *_args: deepcopy(sample)):
+            data = self.client.get('/api/vitals').json
+            cycle = data['cycles'][0]
+            point = data['series']['resting_hr'][0]
+            self.assertEqual(self.client.put('/api/preparation/entries/cycles/' + cycle['_key'],
+                json={'fields': {'start': '2025-01-03', 'end': '2025-01-06'}, 'notes': ''}).status_code, 200)
+            self.assertEqual(self.client.put('/api/preparation/entries/measurements/' + point['_key'],
+                json={'fields': {'value': '72'}, 'notes': ''}).status_code, 200)
+            updated = self.client.get('/api/vitals').json
+            self.assertEqual(updated['cycles'][0]['start'], '2025-01-03')
+            self.assertEqual(updated['cycles'][0]['_original']['start'], '2025-01-01')
+            self.assertEqual(updated['series']['resting_hr'][0]['v'], 72)
+            self.assertEqual(updated['series']['resting_hr'][0]['_original']['value'], 60)
+            self.assertEqual(self.client.put('/api/preparation/entries/cycles/' + cycle['_key'],
+                json={'fields': {'start': 'not-a-date'}, 'notes': ''}).status_code, 400)
 
     def test_manual_medication_and_lab_note_validation(self):
         response = self.client.post('/api/preparation/entries/medications', json={'fields': {'name': 'Sample medication', 'dose': 'Sample dose'}, 'notes': 'Patient note'})
