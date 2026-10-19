@@ -207,6 +207,22 @@ function editorEnvironment() {
   return env;
 }
 
+test('Family history keeps patient updates quiet and omits the original-details heading', () => {
+  const { chart, document } = editorEnvironment();
+  const card = document.createElement('article'); document.body.append(card);
+  chart.preparation.decorate(card, 'family_history', {
+    condition: 'Asthma', _patient_updated: true, _patient_note: 'Symptoms improved after treatment.',
+    _original: { condition: 'Asthma, reported in childhood' }, _key: 'mom-asthma'
+  });
+  const update = card.querySelector('.family-patient-update');
+  assert.ok(update);
+  assert.equal(update.hasAttribute('open'), false, 'the update is collapsed by default');
+  assert.equal(update.querySelector('summary').textContent, 'Patient update');
+  assert.ok(update.textContent.includes('Symptoms improved after treatment.'));
+  assert.equal(card.textContent.includes('Original recorded details'), false);
+  assert.ok(card.querySelector('.edit-record'));
+});
+
 test('Delete entry confirms, removes the complete source group, and preserves drafts on failure', async () => {
   const env = editorEnvironment();
   const { chart, document, dialog } = env;
