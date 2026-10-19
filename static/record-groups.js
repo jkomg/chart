@@ -1,4 +1,4 @@
-// Keep every patient-entered record distinct from the imported name-based summaries.
+// Keep every user-added record distinct from the imported name-based summaries.
 chart.groupClinicalByName = rows => {
   const imported = new Map();
   const manual = [];

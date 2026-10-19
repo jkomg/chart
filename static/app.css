@@ -217,6 +217,39 @@ body[data-mode=owner] .provider-only{display:none!important}
 .priority-form-footer{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:2px}
 .priority-form-footer .save-status{color:var(--muted)}.priority-unsaved{border-color:#c7872b;box-shadow:0 0 0 2px rgba(199,135,43,.12)}
 .priority-add{justify-self:start;min-height:50px;padding:12px 18px;font-size:15px;font-weight:700;border:2px dashed #79a99b}
+.visit-priorities{margin:0 0 32px;padding:22px;background:#f4f8f6;border:1px solid #cbdcd4;border-radius:18px;box-shadow:0 8px 26px rgba(28,58,54,.07)}
+.visit-agenda-heading{display:flex;align-items:center;gap:16px;margin-bottom:14px}
+.visit-agenda-heading>div{margin-right:auto}.visit-agenda-heading .eyebrow{margin:0 0 4px;font-size:10px}
+.visit-agenda-heading h2{margin:0;font:500 24px 'Libre Baskerville',serif;color:#263e43}
+.visit-date-label{display:flex;align-items:center;gap:8px;color:#5f706b;font-size:12px;font-weight:700}
+.visit-date{min-height:42px;padding:8px 10px;border:1px solid #c6d5ce;border-radius:9px;background:#fff;color:var(--ink);font:500 13px 'DM Sans',sans-serif}
+.visit-date:disabled{opacity:.85}
+.visit-priorities>.priority-list{margin-top:16px}.visit-priorities .section-row{margin-top:20px}
+.priority-addressed{grid-column:1/-1;display:flex;align-items:center;gap:9px;color:#62766d;font-size:12px;font-weight:600}
+.priority-addressed input{width:18px;height:18px;accent-color:var(--teal)}
+.visit-history-area,.ongoing-issues-area{margin:34px 0}
+.visit-history,.issues-list{display:grid;gap:10px}
+.visit-history-entry{background:#fff;border:1px solid var(--line);border-radius:12px;padding:0 16px}
+.visit-history-entry>summary{display:flex;align-items:center;gap:14px;padding:16px 0;cursor:pointer;list-style:none}
+.visit-history-entry>summary::-webkit-details-marker{display:none}
+.visit-history-entry>summary::before{content:'›';font-size:21px;color:var(--teal)}
+.visit-history-entry[open]>summary::before{transform:rotate(90deg)}
+.visit-history-date{font-weight:700;color:#33474b}.visit-history-count{margin-left:auto;color:var(--muted);font-size:12px}
+.visit-history-content{padding:0 0 16px;border-top:1px solid #edf0ed}
+.visit-history-content .priority-card{margin-top:12px;box-shadow:none}
+.visit-item-status{margin:10px 0 0;color:#8a6553;font-size:11px;font-weight:600}.visit-item-status.addressed{color:#43806b}
+.visit-closed-date{margin:0;padding:10px 0;border-top:1px solid #edf0ed}
+.visit-history-questions-title{margin:14px 0 6px;font-size:13px;color:#536b63}.visit-history-question{margin:6px 0;font-size:13px}
+.visit-reopen{margin-top:14px}
+.ongoing-issue{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px}
+.ongoing-issue h3{margin:0 0 6px;font-size:15px;color:#33474b}.ongoing-issue>p{margin:0;color:#61716d;font-size:13px;line-height:1.5;white-space:pre-wrap}
+.issue-form{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:10px 14px;align-items:end}
+.issue-form label{display:grid;gap:6px;color:#536b63;font-size:11px;font-weight:700}
+.issue-form input,.issue-form textarea{width:100%;border:1px solid #cbd8d2;border-radius:8px;padding:9px 10px;font:400 14px/1.45 'DM Sans',sans-serif;color:var(--ink);background:#fff}
+.issue-form textarea{resize:vertical}.issue-actions{grid-column:1/-1;display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+.issue-new-form{margin-top:14px;padding:16px;background:#f8faf9;border:1px dashed #afc6bc;border-radius:12px}
+.visit-priorities .goal-list{border:0}
+@media(max-width:650px){.visit-priorities{padding:16px}.visit-agenda-heading{align-items:flex-start;flex-wrap:wrap}.visit-date-label{width:100%;justify-content:space-between}.visit-date{flex:1}.visit-agenda-heading h2{font-size:20px}.issue-form{grid-template-columns:1fr}}
 body[data-mode=provider] .priority-card{padding:18px 20px}
 body[data-mode=provider] .priority-card-heading{margin-bottom:12px}
 body[data-mode=provider] .priority-field{background:#fff}
@@ -231,12 +264,12 @@ body[data-mode=provider] .priority-field-goal{background:#eef6f3}
 body[data-mode=provider] .preparation-section:not(.has-content){display:none}
 .patient-label{font-size:12px;font-weight:700;color:var(--teal);margin:12px 0 8px;text-transform:uppercase;letter-spacing:.5px}
 .patient-summary h2{font-size:20px;margin:8px 0}.patient-text{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.6;font-size:16px;margin:8px 0 14px}
-.patient-notes>summary,.section-editor>summary,.original-record>summary{cursor:pointer;min-height:44px;padding:12px 0;font-weight:600;color:var(--teal)}
+.patient-notes>summary,.section-editor>summary{cursor:pointer;min-height:44px;padding:12px 0;font-weight:600;color:var(--teal)}
 .preparation-form{display:flex;flex-direction:column;gap:16px}.preparation-form label{display:flex;flex-direction:column;gap:7px;font-size:15px;font-weight:600}
 .preparation-form textarea,.preparation-form input,.preparation-form select{width:100%;font:400 16px/1.5 'DM Sans',sans-serif;color:var(--ink);background:white;border:1px solid #b6c6bf;border-radius:8px;padding:10px 12px;min-height:44px}
 .preparation-form textarea{resize:vertical}.preparation-form h2{margin:0;font-size:24px}.preparation-form .vital-meta{margin:0}
 .editor-actions{display:flex;flex-wrap:wrap;gap:12px;align-items:center}.editor-actions button{min-height:44px}.save-status{color:var(--muted);margin:0;font-size:14px}.save-status:empty{display:none}
-.edit-record{display:block;min-height:44px;font-size:14px}.original-record p{font-size:14px;line-height:1.5;white-space:pre-wrap}
+.edit-record{display:block;min-height:44px;font-size:14px}
 .record-editor{width:min(600px,calc(100vw - 32px));max-height:calc(100dvh - 40px);overflow:auto;border:1px solid var(--line);border-radius:14px;padding:24px;color:var(--ink)}
 .record-editor::backdrop{background:rgba(25,40,45,.5)}
 button:disabled{cursor:wait;opacity:.55}

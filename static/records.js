@@ -104,7 +104,7 @@
       if (row.document) card.append(sourceButton(row.document, row.page));
       list.append(card);
     }
-    body('medications', chart.preparation.addButton('medications'), el('p', { class: 'vital-meta' }, 'Source records and patient updates are labeled below.'), rows.length ? list : el('p', {}, 'No medications recorded.'));
+    body('medications', chart.preparation.addButton('medications'), el('p', { class: 'vital-meta' }, 'Source records and notes are labeled below.'), rows.length ? list : el('p', {}, 'No medications recorded.'));
   }
 
   // ---------- medical records ----------
