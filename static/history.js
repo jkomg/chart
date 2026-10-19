@@ -1,6 +1,6 @@
 // Keep documented status and every source; an old mention is not confirmation of current status.
 (() => {
-  const { el, day, sourceButton, accordion, body } = chart.clinicalUI;
+  const { el, day, sourceButton, canViewSource, accordion, body } = chart.clinicalUI;
   chart.renderHistory = data => {
     const { events, diagnoses, allergies } = data;
     const search = el('input', { type: 'search', class: 'search-input', placeholder: 'Search conditions, procedures, or visits', 'aria-label': 'Search medical history' });
@@ -37,11 +37,12 @@
             el('p', { class: 'vital-meta' }, type === 'allergy' ? row.reaction || 'Reaction not recorded' :
               [day(row.date), row.status || (type === 'condition' ? 'Status unconfirmed' : row.type)].filter(Boolean).join(' · ')));
           if (row.detail || row.note) entry.append(el('p', { class: 'history-note' }, row.detail || row.note));
-          if (row.sources?.length) {
-            const sources = el('details', { class: 'condition-sources' }, el('summary', {}, `${row.sources.length} source record${row.sources.length === 1 ? '' : 's'}`));
-            for (const src of [...row.sources].reverse()) sources.append(el('div', {}, sourceButton(src.document, src.page, `${day(src.date)} · ${src.status || 'Status unconfirmed'} · source →`)));
+          const permittedSources = (row.sources || []).filter(src => canViewSource(src.document));
+          if (permittedSources.length) {
+            const sources = el('details', { class: 'condition-sources' }, el('summary', {}, `${permittedSources.length} source record${permittedSources.length === 1 ? '' : 's'}`));
+            for (const src of [...permittedSources].reverse()) sources.append(el('div', {}, sourceButton(src.document, src.page, `${day(src.date)} · ${src.status || 'Status unconfirmed'} · source →`)));
             entry.append(sources);
-          } else if (row.document) entry.append(sourceButton(row.document, row.page));
+          } else if (row.document && canViewSource(row.document)) entry.append(sourceButton(row.document, row.page));
           chart.preparation.decorate(entry, type === 'condition' ? 'diagnoses' : type === 'allergy' ? 'allergies' : 'events', row);
           list.append(entry);
         }

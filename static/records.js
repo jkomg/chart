@@ -2,11 +2,21 @@
 // family history, genetics. Every item links back to the page it came from. Sections keep their
 // starter content until this account has extracted data.
 (() => {
-  const { el, day, sourceButton, body, chip } = chart.clinicalUI;
+  const { el, day, sourceButton, canViewSource, body, chip } = chart.clinicalUI;
   const KINDS = { lab: 'Lab results', genetic: 'Genetic test', visit: 'Visit', er: 'Emergency visit', imaging: 'Imaging',
                   monitor: 'Monitoring', sleep: 'Sleep study', other: 'Document' };
   let data = null, docsByName = {};
   const uploadedDocuments = [...document.querySelectorAll('#documents .document-card')].map(a => decodeURIComponent(a.getAttribute('href').slice(5)));
+  function syncProviderDocuments() {
+    const entries = [...document.querySelectorAll('#documents [data-provider-document]')];
+    entries.forEach(entry => { entry.hidden = !canViewSource(entry.dataset.providerDocument); });
+    const count = document.querySelector('.nav-item[data-tab="documents"] em');
+    if (count) count.textContent = entries.filter(entry => !entry.hidden).length;
+    const empty = document.querySelector('#documents .provider-sources-empty');
+    if (empty) empty.hidden = chart.mode !== 'provider' || entries.some(entry => !entry.hidden);
+  }
+  document.addEventListener('chart:mode', syncProviderDocuments);
+  document.addEventListener('chart:sourceSelection', syncProviderDocuments);
 
   // Long notes (e.g. 93 genes tested) fold away so the result stays readable.
   const longText = (text, limit = 220) => text.length <= limit ? el('p', { class: 'vital-meta' }, text)
@@ -55,7 +65,6 @@
       for (const row of rows) {
         const item = el('article', { class: 'family-condition' },
           el('div', {}, el('p', { class: 'eyebrow' }, 'Family history'), el('h2', {}, row.condition || 'No condition details recorded')));
-        if (row.document) item.append(sourceButton(row.document, row.page));
         chart.preparation.decorate(item, 'family_history', row);
         const move = el('details', { class: 'family-move owner-only' }, el('summary', {}, 'Move to another member'));
         const target = el('select', { 'aria-label': `Move ${row.condition || 'family history item'} to another member` });
@@ -116,15 +125,32 @@
           d.summary ? el('p', { class: 'record-summary' }, d.summary) : null),
         el('span', { class: 'record-arrow' }, '→'));
       const entry = el('article', { class: 'document-entry' }, row);
+      entry.dataset.providerDocument = d.document;
+      entry.hidden = !canViewSource(d.document);
       chart.preparation.decorate(entry, 'documents', d);
+      const include = el('input', { type: 'checkbox', 'aria-label': `Include ${d.title || d.document} source in Provider view` });
+      include.checked = chart.preparation.isSourceIncluded(d.document);
+      const flagError = el('span', { class: 'source-flag-error', role: 'alert' });
+      include.addEventListener('change', async () => {
+        const next = include.checked;
+        include.disabled = true; flagError.textContent = '';
+        try { await chart.preparation.setSourceIncluded(d.document, next); }
+        catch (error) { include.checked = !next; flagError.textContent = error.message; }
+        finally { include.disabled = false; }
+      });
+      entry.append(el('label', { class: 'source-inclusion owner-only' }, include, el('span', {}, 'Include source in Provider view')),
+        flagError);
       list.append(entry);
     }
     const deletedDocuments = new Set((data.deleted_entries?.documents || []).map(d => d.document));
     const extra = uploaded.filter(n => !known.has(n) && !deletedDocuments.has(n));
     if (extra.length) {
       list.append(el('p', { class: 'eyebrow timeline-year' }, 'Uploaded, not yet extracted'));
-      extra.forEach(n => list.append(el('a', { class: 'record-row', href: `#doc/${encodeURIComponent(n)}` },
-        el('div', { class: 'pdf-icon' }, 'PDF'), el('div', { class: 'record-copy' }, el('b', {}, n)), el('span', { class: 'record-arrow' }, '→'))));
+      extra.forEach(n => {
+        const entry = el('a', { class: 'record-row', href: `#doc/${encodeURIComponent(n)}`, 'data-provider-document': n });
+        entry.append(el('div', { class: 'pdf-icon' }, 'PDF'), el('div', { class: 'record-copy' }, el('b', {}, n)), el('span', { class: 'record-arrow' }, '→'));
+        list.append(entry);
+      });
     }
     const search = el('input', { type: 'search', class: 'search-input', placeholder: 'Search documents', 'aria-label': 'Search documents' });
     search.addEventListener('input', () => {
@@ -132,9 +158,11 @@
       list.querySelectorAll('.record-row').forEach(r => { r.hidden = q && !r.textContent.toLowerCase().includes(q); });
     });
     const upload = section.querySelector('.upload-banner');
-    body('documents', el('div', { class: 'filter-row plain' }, search), list, upload || '');
-    const count = document.querySelector('.nav-item[data-tab="documents"] em');
-    if (count) count.textContent = data.documents.length + extra.length;
+    body('documents', el('div', { class: 'filter-row plain' }, search),
+      el('p', { class: 'vital-meta owner-only' }, 'Select only the source PDFs you may need during the visit. Unselected PDFs stay out of Provider view.'),
+      el('p', { class: 'provider-sources-empty provider-only' }, 'No source PDFs selected for Provider view. In Prepare, include the records you want to open during the visit.'),
+      list, upload || '');
+    syncProviderDocuments();
   }
 
   // ---------- genetics ----------

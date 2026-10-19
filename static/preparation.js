@@ -172,6 +172,15 @@
     button.addEventListener('click', () => editRecord(table, null, defaults));
     return button;
   };
+  const isSourceIncluded = filename => Boolean(saved[`source:${filename}`]?.included);
+  const canViewSource = filename => chart.mode !== 'provider' || isSourceIncluded(filename);
+  const setSourceIncluded = async (filename, included) => {
+    if (chart.mode !== 'owner') throw new Error('Switch to Prepare to choose source documents.');
+    const update = await write('/api/preparation/sources', 'PUT', { document: filename, included });
+    saved[`source:${filename}`] = { included: update.included };
+    document.dispatchEvent(new CustomEvent('chart:sourceSelection', { detail: { document: filename, included } }));
+    return update;
+  };
   const moveFamilyRow = async (row, relation) => {
     if (chart.mode !== 'owner') throw new Error('Switch to Prepare to edit family history.');
     const fields = { relation };
@@ -247,6 +256,6 @@
       document.getElementById(id).append(panel);
     }
   };
-  chart.preparation = { decorate, addButton, renderDeleted, deleteRow, moveFamilyRow };
+  chart.preparation = { decorate, addButton, renderDeleted, deleteRow, moveFamilyRow, isSourceIncluded, canViewSource, setSourceIncluded };
   document.addEventListener('chart:mode', () => { if (chart.mode === 'provider') { dialog.close(); modalDirty = false; } });
 })();

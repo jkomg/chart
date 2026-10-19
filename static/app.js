@@ -37,7 +37,10 @@ function route() {
 }
 
 chart.go = hash => { if (location.hash.slice(1) !== hash) location.hash = hash; };
-chart.openDoc = (file, page) => chart.go(`doc/${encodeURIComponent(file)}${page ? `/${page}` : ''}`);
+chart.openDoc = (file, page) => {
+  if (chart.mode === 'provider' && !chart.preparation?.isSourceIncluded(file)) return;
+  chart.go(`doc/${encodeURIComponent(file)}${page ? `/${page}` : ''}`);
+};
 // Update the current entry (filters, etc.) without adding a history step.
 chart.replaceQuery = params => history.replaceState(null, '', `#${chart.lastTab}?${new URLSearchParams(params)}`);
 

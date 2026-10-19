@@ -98,6 +98,26 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(self.client.put('/api/preparation/sections/history', json=payload).status_code, 401)
         self.assertEqual(self.client.get('/api/preparation').status_code, 401)
 
+    def test_provider_source_selection_is_validated_and_account_scoped(self):
+        url = '/api/preparation/sources'
+        self.assertEqual(self.client.put(url, json={'document': 'visit.pdf', 'included': True}).json,
+                         {'document': 'visit.pdf', 'included': True})
+        self.assertEqual(self.client.get('/api/preparation').json['source:visit.pdf'], {'included': True})
+        for payload in [
+            {'document': '../private.pdf', 'included': True},
+            {'document': 'visit.pdf', 'included': 'true'},
+            {'document': '', 'included': False},
+            {'document': 'visit.txt', 'included': True},
+        ]:
+            self.assertEqual(self.client.put(url, json=payload).status_code, 400)
+        with self.client.session_transaction() as session:
+            session['user'] = 'sample-b'
+        self.assertNotIn('source:visit.pdf', self.client.get('/api/preparation').json)
+        self.assertEqual(self.client.put(url, json={'document': 'visit.pdf', 'included': False}).status_code, 200)
+        with self.client.session_transaction() as session:
+            session.clear()
+        self.assertEqual(self.client.put(url, json={'document': 'visit.pdf', 'included': True}).status_code, 401)
+
     def test_patient_updates_preserve_imports_and_can_be_restored(self):
         manifest = {'document': 'sample.pdf', 'diagnoses': [{'name': 'Sample condition', 'status': 'history', 'page': 2}]}
         app.clinical.replace_document(app.get_db(), 'sample-a', manifest)
