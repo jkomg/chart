@@ -434,6 +434,8 @@
     const shown = cycles.filter(c => !start || (c.e || c.s) >= start);
     if (!shown.length) {
       card.append(el('p', { class: 'vital-empty' }, 'No periods in this range. ', rangeButton('Show all', 'all')));
+      // Historical rows may fall outside the selected chart range but remain editable in Prepare.
+      card.append(cycleTable(cycles, withLength));
       return card;
     }
     card.append(el('p', { class: 'eyebrow chart-label' }, 'Periods'));
