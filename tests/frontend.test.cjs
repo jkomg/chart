@@ -7,7 +7,8 @@ const { parseHTML } = require('linkedom');
 function environment(data = {}) {
   const { document, window } = parseHTML(`<html><body>
     ${['history', 'family', 'medications', 'documents', 'genetics'].map(id => `<section id="${id}"><div class="page-heading"></div><article class="preparation-section"><textarea>Unsaved ${id} draft</textarea></article><div class="starter">Starter content</div></section>`).join('')}
-    <nav><button data-tab="documents"><em>0</em></button></nav>
+    <section id="goals"><div class="goal-list priority-list" data-key="items" data-label="priority" data-empty="No priorities"></div><div class="goal-list" data-key="questions" data-label="question" data-empty="No questions"></div><script id="goals-data" type="application/json">${JSON.stringify(data.goals || { items: [], questions: [] })}</script></section>
+    <nav><button data-tab="documents"><em>0</em></button><button class="nav-item" data-tab="goals"></button></nav>
   </body></html>`);
   const el = (tag, attrs = {}, ...kids) => {
     const node = document.createElement(tag);
@@ -18,9 +19,16 @@ function environment(data = {}) {
   const openedSources = [];
   const chart = { mode: 'owner', openDoc: (document, page) => openedSources.push([document, page]), renderLabs() {} };
   const includedSources = new Set(data.includedSources || []);
+  const requests = [];
   const clinical = { documents: [], events: [], diagnoses: [], allergies: [], medications: [], family_history: [], clinical_genetics: [], lab_results: [], ...data };
   const context = vm.createContext({ document, window, chart,
-    fetch: async url => ({ ok: true, json: async () => url === '/api/genetics' ? { findings: [], sources: [] } : clinical })
+    fetch: async (url, options = {}) => {
+      if (url === '/api/goals') {
+        const payload = JSON.parse(options.body); requests.push(payload);
+        return { ok: true, json: async () => payload };
+      }
+      return { ok: true, json: async () => url === '/api/genetics' ? { findings: [], sources: [] } : clinical };
+    }
   });
   window.chartKit = { el, fmtDate: date => date.toISOString().slice(0, 10), parse: value => new Date(value) };
   const run = name => vm.runInContext(readFileSync(`static/${name}.js`, 'utf8'), context);
@@ -40,9 +48,33 @@ function environment(data = {}) {
       container.append(el('button', { 'data-key': row._key, class: 'edit-record' }, 'Edit / add notes'));
     }
   };
-  return { chart, document, run, context, window, openedSources };
+  return { chart, document, run, context, window, openedSources, requests };
 }
 const settled = () => new Promise(resolve => setImmediate(resolve));
+
+test('Visit priorities show and save the three structured details with an explicit rank', async () => {
+  const { chart, document, run, window, requests } = environment({ goals: {
+    items: [{ priority: 1, doing: 'Labs ordered', goal: 'Understand fatigue', direction: 'Discuss next steps' }], questions: []
+  } });
+  run('goals');
+  const priority = document.querySelector('.priority-card');
+  assert.equal(priority.querySelector('.priority-badge').textContent, 'Priority 1');
+  assert.deepEqual([...priority.querySelectorAll('.priority-field>span')].map(node => node.textContent), [
+    'What’s being done', 'Goal', 'Requested clinical direction'
+  ]);
+  const goal = priority.querySelector('[aria-label="Goal"]');
+  assert.equal(goal.value, 'Understand fatigue');
+  goal.value = 'Find the cause of fatigue';
+  goal.dispatchEvent(new window.Event('input', { bubbles: true }));
+  assert.equal(chart.hasUnsavedPreparation(), true);
+  priority.querySelector('form').dispatchEvent(new window.Event('submit', { cancelable: true }));
+  await settled();
+  assert.equal(requests.at(-1).items[0].goal, 'Find the cause of fatigue');
+  assert.equal(requests.at(-1).items[0].doing, 'Labs ordered');
+  assert.equal(requests.at(-1).items[0].direction, 'Discuss next steps');
+  assert.equal(requests.at(-1).items[0].priority, 1);
+  assert.equal(chart.hasUnsavedPreparation(), false);
+});
 
 test('Documents and Genetics retain preparation content during initial and repeated rendering', async () => {
   const { chart, document, run } = environment({
@@ -119,6 +151,7 @@ test('Family history renders one expandable profile per relative with their own 
   assert.deepEqual([...dad.querySelectorAll('.family-condition h2')].map(node => node.textContent), ['Diabetes']);
   assert.equal(mother.querySelectorAll('.family-condition .edit-record').length, 2);
   assert.equal(mother.querySelectorAll('.family-condition .family-delete').length, 2);
+  assert.equal(mother.querySelectorAll('.family-condition .eyebrow').length, 0, 'the profile already provides the family-history context');
   assert.equal(mother.querySelectorAll('.source-link').length, 0);
   assert.equal([...mother.querySelectorAll('.family-profile-content button')].at(-1).textContent, 'Add condition');
   assert.ok(mother.querySelector('.family-move').textContent.includes('Move to another member'));

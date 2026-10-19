@@ -35,9 +35,19 @@ class DashboardTests(unittest.TestCase):
         self.assertNotIn('data-toast=', html)
 
     def test_goal_order_is_saved_without_crossing_accounts(self):
+        app.save_records('sample-a', {'goals': {'items': ['Older saved goal'], 'questions': []}})
+        migrated = self.client.get('/api/records').json['goals']['items'][0]
+        self.assertEqual(migrated, {'priority': 1, 'doing': '', 'goal': 'Older saved goal', 'direction': ''})
         goals = {'items': ['Priority 2', 'Priority 1'], 'questions': ['Sample question']}
-        self.assertEqual(self.client.post('/api/goals', json=goals).json, goals)
-        self.assertEqual(self.client.get('/api/records').json['goals'], goals)
+        expected = {'items': [
+            {'priority': 1, 'doing': '', 'goal': 'Priority 2', 'direction': ''},
+            {'priority': 2, 'doing': '', 'goal': 'Priority 1', 'direction': ''},
+        ], 'questions': ['Sample question']}
+        self.assertEqual(self.client.post('/api/goals', json=goals).json, expected)
+        self.assertEqual(self.client.get('/api/records').json['goals'], expected)
+        detailed = {'items': [{'priority': 1, 'doing': 'Testing underway', 'goal': 'Understand the cause', 'direction': 'Discuss next steps'}], 'questions': []}
+        self.assertEqual(self.client.post('/api/goals', json=detailed).json, detailed)
+        self.assertEqual(self.client.post('/api/goals', json={'items': [{'doing': 123}], 'questions': []}).status_code, 400)
         with self.client.session_transaction() as session:
             session['user'] = 'sample-b'
         self.assertEqual(self.client.get('/api/records').json['goals'], {'items': [], 'questions': []})
