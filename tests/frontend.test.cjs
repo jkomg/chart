@@ -58,9 +58,9 @@ test('Visit priorities show and save the three structured details with an explic
   } });
   run('goals');
   const priority = document.querySelector('.priority-card');
-  assert.equal(priority.querySelector('.priority-badge').textContent, 'Priority 1');
+  assert.equal(priority.querySelector('.priority-heading').textContent, 'Priority 1');
   assert.deepEqual([...priority.querySelectorAll('.priority-field>span')].map(node => node.textContent), [
-    'What’s being done', 'Goal', 'Requested clinical direction'
+    'Priority 1', 'Goal', 'Requested clinical direction'
   ]);
   const goal = priority.querySelector('[aria-label="Goal"]');
   assert.equal(goal.value, 'Understand fatigue');

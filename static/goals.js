@@ -12,7 +12,7 @@
     return node;
   };
   const fields = [
-    ['doing', 'What’s being done', 'Treatments, tests, or steps already underway'],
+    ['doing', null, 'Treatments, tests, or steps already underway'],
     ['goal', 'Goal', 'What you hope to achieve or understand'],
     ['direction', 'Requested clinical direction', 'The advice, decision, or next step you want from your clinician'],
   ];
@@ -57,8 +57,8 @@
 
   function renderPriority(item, index, items, owner) {
     const card = el('article', { class: `priority-card${owner ? ' priority-card-editing' : ' priority-card-provider'}` });
-    const badge = el('span', { class: 'priority-badge' }, `Priority ${index + 1}`);
-    const heading = el('div', { class: 'priority-card-heading' }, badge);
+    const priorityLabel = `Priority ${index + 1}`;
+    const heading = el('div', { class: 'priority-card-heading' }, el('h2', { class: 'priority-heading' }, priorityLabel));
     if (owner) {
       const actions = el('div', { class: 'priority-actions' });
       for (const [offset, symbol, action] of [[-1, '↑', 'Move up'], [1, '↓', 'Move down']]) {
@@ -83,7 +83,7 @@
         const input = el('textarea', { rows: 3, maxlength: 5000, 'aria-label': label, placeholder });
         input.value = item[key];
         inputs[key] = input;
-        form.append(el('label', { class: `priority-field priority-field-${key}` }, el('span', {}, label), input));
+        form.append(el('label', { class: `priority-field priority-field-${key}` }, el('span', {}, label || priorityLabel), input));
       }
       const footer = el('div', { class: 'priority-form-footer' });
       const status = el('span', { class: 'save-status', role: 'status' });
@@ -110,7 +110,7 @@
       for (const [key, label] of fields) {
         if (!item[key]) continue;
         populated = true;
-        content.append(el('section', { class: `priority-field priority-field-${key}` }, el('h3', {}, label), el('p', {}, item[key])));
+        content.append(el('section', { class: `priority-field priority-field-${key}` }, el('h3', {}, label || priorityLabel), el('p', {}, item[key])));
       }
       if (!populated) content.append(el('p', { class: 'vital-meta' }, 'Details have not been added yet.'));
       card.append(content);
