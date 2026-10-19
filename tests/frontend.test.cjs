@@ -43,6 +43,7 @@ function environment(data = {}) {
       document.dispatchEvent(new window.Event('chart:sourceSelection'));
     },
     addButton: (_table, label = 'Add') => el('button', {}, label),
+    familyMemberDetails: relation => el('div', { class: 'family-member-facts' }, relation),
     decorate: (container, table, row) => {
       container.append(el('button', { 'data-key': row._key, class: 'edit-record' }, 'Edit / add notes'));
     }
@@ -194,6 +195,7 @@ test('Family history renders one expandable profile per relative with their own 
   assert.equal(mother.querySelectorAll('.source-link').length, 0);
   assert.equal([...mother.querySelectorAll('.family-profile-content button')].at(-1).textContent, 'Add condition');
   assert.ok(mother.querySelector('.family-move').textContent.includes('Move to another member'));
+  assert.ok(mother.querySelector('.family-member-facts'));
 });
 
 for (const [table, section, selector] of [['diagnoses', 'history', '.history-entry'], ['medications', 'medications', '.medication-row']]) {
@@ -219,6 +221,22 @@ for (const [table, section, selector] of [['diagnoses', 'history', '.history-ent
     if (section === 'history') assert.ok(document.querySelector(`#${section} .condition-sources`).textContent.includes('2 source records'));
   });
 }
+
+test('Family member details save DOB and deceased status independently of conditions', async () => {
+  const env = editorEnvironment();
+  const { chart, document } = env;
+  const facts = chart.preparation.familyMemberDetails('Mother');
+  document.body.append(facts);
+  facts.querySelector('[aria-label="Mother date of birth"]').value = '1970-02-03';
+  facts.querySelector('[aria-label="Mother deceased"]').checked = true;
+  facts.querySelector('[aria-label="Mother date of death"]').value = '2024-01-09';
+  facts.querySelector('form').dispatchEvent(new env.window.Event('submit', { bubbles: true, cancelable: true }));
+  await settled();
+  assert.deepEqual(env.requests.at(-1), {
+    url: '/api/preparation/family-members', method: 'PUT',
+    body: { relation: 'Mother', fields: { dob: '1970-02-03', deceased: true, date_of_death: '2024-01-09' } }
+  });
+});
 
 function editorEnvironment() {
   const env = environment();

@@ -62,6 +62,7 @@
           el('span', { class: 'family-profile-chevron', 'aria-hidden': 'true' }, '⌄')),
         el('div', { class: 'family-profile-content' }));
       const content = profile.querySelector('.family-profile-content');
+      profile.insertBefore(chart.preparation.familyMemberDetails(relation), content);
       for (const row of rows) {
         const item = el('article', { class: 'family-condition' },
           el('div', {}, el('h2', {}, row.condition || 'No condition details recorded')));

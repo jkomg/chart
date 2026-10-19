@@ -26,6 +26,45 @@
     return result;
   }
 
+  const familySlug = relation => relation.trim().toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, '_').replace(/^_+|_+$/g, '');
+  chart.preparation = chart.preparation || {};
+  chart.preparation.familyMemberDetails = relation => {
+    const key = 'family_member:' + familySlug(relation);
+    const current = saved[key] || { dob: '', deceased: false, date_of_death: '' };
+    const facts = el('div', { class: 'family-member-facts' });
+    const summary = el('p', { class: 'family-member-facts-summary' });
+    const form = el('form', { class: 'family-member-facts-form owner-only' });
+    const dob = el('input', { type: 'date', 'aria-label': `${relation} date of birth` });
+    const deceased = el('input', { type: 'checkbox', 'aria-label': `${relation} deceased` });
+    const deathDate = el('input', { type: 'date', 'aria-label': `${relation} date of death` });
+    const status = el('span', { class: 'family-member-save-status', role: 'status' });
+    const save = el('button', { type: 'submit', class: 'outline-button compact' }, 'Save');
+    function render() {
+      dob.value = current.dob || ''; deceased.checked = Boolean(current.deceased); deathDate.value = current.date_of_death || '';
+      deathDate.hidden = !deceased.checked;
+      const entries = [];
+      if (current.dob) entries.push(`Born ${current.dob}`);
+      entries.push(current.deceased ? `Deceased${current.date_of_death ? ` ${current.date_of_death}` : ''}` : 'Living status not specified');
+      summary.textContent = entries.join(' · ');
+      summary.hidden = !current.dob && !current.deceased;
+    }
+    deceased.addEventListener('change', () => { deathDate.hidden = !deceased.checked; });
+    form.append(el('label', {}, 'DOB', dob), el('label', { class: 'family-deceased-field' }, deceased, 'Deceased'),
+      el('label', { class: 'family-death-date' }, 'Date of death', deathDate), save, status);
+    form.addEventListener('submit', async event => {
+      event.preventDefault(); if (chart.mode !== 'owner') return;
+      save.disabled = dob.disabled = deceased.disabled = deathDate.disabled = true; status.textContent = 'Saving…';
+      try {
+        const result = await write('/api/preparation/family-members', 'PUT', {
+          relation, fields: { dob: dob.value, deceased: deceased.checked, date_of_death: deathDate.value }
+        });
+        Object.assign(current, result); saved[key] = current; render(); status.textContent = 'Saved';
+      } catch (error) { status.textContent = error.message; }
+      finally { save.disabled = dob.disabled = deceased.disabled = deathDate.disabled = false; }
+    });
+    render(); facts.append(summary, form); return facts;
+  };
+
   for (const section of document.querySelectorAll('.tab-panel')) {
     const key = 'section:' + section.id;
     let value = saved[key] || { summary: '', notes: '' };
@@ -256,6 +295,6 @@
       document.getElementById(id).append(panel);
     }
   };
-  chart.preparation = { editRecord, decorate, addButton, renderDeleted, deleteRow, moveFamilyRow, isSourceIncluded, canViewSource, setSourceIncluded };
+  chart.preparation = { editRecord, decorate, addButton, renderDeleted, deleteRow, moveFamilyRow, isSourceIncluded, canViewSource, setSourceIncluded, familyMemberDetails: chart.preparation.familyMemberDetails };
   document.addEventListener('chart:mode', () => { if (chart.mode === 'provider') { dialog.close(); modalDirty = false; } });
 })();
