@@ -172,6 +172,14 @@
     button.addEventListener('click', () => editRecord(table, null, defaults));
     return button;
   };
+  const moveFamilyRow = async (row, relation) => {
+    if (chart.mode !== 'owner') throw new Error('Switch to Prepare to edit family history.');
+    const fields = { relation };
+    if (row._manual) fields.condition = row.condition || '';
+    else if (row._original && (row.condition ?? '') !== (row._original.condition ?? '')) fields.condition = row.condition ?? '';
+    await write(`/api/preparation/entries/family_history/${encodeURIComponent(row._key)}`, 'PUT', { fields, notes: row._patient_note || '' });
+    await refreshRecords(`Condition moved to ${relation}.`);
+  };
   const decorate = (container, table, row) => {
     if (row._manual || row._patient_updated || row._patient_note) {
       container.append(el('p', { class: 'patient-label' }, row._manual ? 'Patient-entered' : row._patient_updated ? 'Patient update' : 'Patient note'));
@@ -239,6 +247,6 @@
       document.getElementById(id).append(panel);
     }
   };
-  chart.preparation = { decorate, addButton, renderDeleted, deleteRow };
+  chart.preparation = { decorate, addButton, renderDeleted, deleteRow, moveFamilyRow };
   document.addEventListener('chart:mode', () => { if (chart.mode === 'provider') { dialog.close(); modalDirty = false; } });
 })();

@@ -14,16 +14,35 @@
   const card = (title, ...kids) => el('article', { class: 'vital-card' }, title ? el('h2', { class: 'card-title' }, title) : null, ...kids);
 
   // ---------- family history ----------
+  const familyOrder = ['Mother', 'Father', 'Brother', 'Maternal Grandmother', 'Maternal Grandfather', 'Paternal Grandmother', 'Paternal Grandfather'];
+  const familyAliases = new Map([
+    ['mom', 'Mother'], ['mum', 'Mother'], ['mother', 'Mother'],
+    ['dad', 'Father'], ['father', 'Father'],
+    ['brother', 'Brother'],
+    ['maternal grandma', 'Maternal Grandmother'], ['maternal grandmother', 'Maternal Grandmother'],
+    ['paternal grandma', 'Paternal Grandmother'], ['paternal grandmother', 'Paternal Grandmother'],
+    ['maternal grandpa', 'Maternal Grandfather'], ['maternal grandfather', 'Maternal Grandfather'],
+    ['paternal grandpa', 'Paternal Grandfather'], ['paternal grandfather', 'Paternal Grandfather']
+  ]);
+  const familyKey = relation => familyAliases.get(relation.trim().toLocaleLowerCase()) || relation.trim().toLocaleLowerCase();
+  const familyLabel = relation => familyAliases.get(relation.trim().toLocaleLowerCase()) || relation.trim();
   function renderFamily() {
     const list = el('div', { class: 'family-grid' });
     const members = new Map();
     for (const row of data.family_history) {
-      const relation = (row.relation || 'Family member').trim();
-      const key = relation.toLocaleLowerCase();
+      const relation = familyLabel(row.relation || 'Family member');
+      const key = familyKey(relation);
       if (!members.has(key)) members.set(key, { relation, rows: [] });
       members.get(key).rows.push(row);
     }
-    for (const { relation, rows } of members.values()) {
+    const orderedMembers = [...members.entries()].sort(([keyA, a], [keyB, b]) => {
+      const rankA = familyOrder.indexOf(a.relation), rankB = familyOrder.indexOf(b.relation);
+      if ((rankA < 0) !== (rankB < 0)) return rankA < 0 ? 1 : -1;
+      if (rankA >= 0 && rankA !== rankB) return rankA - rankB;
+      return a.relation.localeCompare(b.relation) || keyA.localeCompare(keyB);
+    });
+    const destinations = [...new Set([...familyOrder, ...[...members.values()].map(member => member.relation)])];
+    for (const [memberKey, { relation, rows }] of orderedMembers) {
       const conditions = rows.filter(row => row.condition?.trim());
       const profile = el('details', { class: 'family-profile' },
         el('summary', { class: 'family-profile-summary' },
@@ -38,6 +57,20 @@
           el('div', {}, el('p', { class: 'eyebrow' }, 'Family history'), el('h2', {}, row.condition || 'No condition details recorded')));
         if (row.document) item.append(sourceButton(row.document, row.page));
         chart.preparation.decorate(item, 'family_history', row);
+        const move = el('details', { class: 'family-move owner-only' }, el('summary', {}, 'Move to another member'));
+        const target = el('select', { 'aria-label': `Move ${row.condition || 'family history item'} to another member` });
+        target.append(el('option', { value: '', selected: true, disabled: true }, 'Choose a relative'));
+        for (const destination of destinations.filter(name => familyKey(name) !== memberKey)) target.append(el('option', { value: destination }, destination));
+        const moveButton = el('button', { type: 'button', class: 'outline-button compact' }, 'Move condition');
+        const moveError = el('span', { class: 'family-move-error', role: 'alert' });
+        moveButton.addEventListener('click', async () => {
+          if (!target.value) { moveError.textContent = 'Choose a relative first.'; return; }
+          moveButton.disabled = true; moveError.textContent = '';
+          try { await chart.preparation.moveFamilyRow(row, target.value); }
+          catch (error) { moveError.textContent = error.message; moveButton.disabled = false; }
+        });
+        move.append(target, moveButton, moveError);
+        item.append(move);
         const remove = el('button', { type: 'button', class: 'text-button family-delete owner-only' }, 'Remove');
         remove.addEventListener('click', () => chart.preparation.deleteRow('family_history', row));
         item.append(remove);
