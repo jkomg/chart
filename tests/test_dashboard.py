@@ -36,21 +36,27 @@ class DashboardTests(unittest.TestCase):
 
     def test_goal_order_is_saved_without_crossing_accounts(self):
         app.save_records('sample-a', {'goals': {'items': ['Older saved goal'], 'questions': []}})
-        migrated = self.client.get('/api/records').json['goals']['items'][0]
-        self.assertEqual(migrated, {'priority': 1, 'doing': '', 'goal': 'Older saved goal', 'direction': ''})
-        goals = {'items': ['Priority 2', 'Priority 1'], 'questions': ['Sample question']}
-        expected = {'items': [
-            {'priority': 1, 'doing': '', 'goal': 'Priority 2', 'direction': ''},
-            {'priority': 2, 'doing': '', 'goal': 'Priority 1', 'direction': ''},
-        ], 'questions': ['Sample question']}
+        migrated = self.client.get('/api/records').json['goals']['current_visit']['items'][0]
+        self.assertEqual(migrated, {'priority': 1, 'doing': '', 'goal': 'Older saved goal', 'direction': '', 'addressed': False})
+        goals = {'current_visit': {'date': '2026-10-19', 'items': [
+            {'goal': 'Priority 2'}, {'goal': 'Priority 1'}], 'questions': ['Sample question']}, 'visits': [], 'issues': []}
+        expected = {'current_visit': {'date': '2026-10-19', 'items': [
+            {'priority': 1, 'doing': '', 'goal': 'Priority 2', 'direction': '', 'addressed': False},
+            {'priority': 2, 'doing': '', 'goal': 'Priority 1', 'direction': '', 'addressed': False},
+        ], 'questions': ['Sample question']}, 'visits': [], 'issues': []}
         self.assertEqual(self.client.post('/api/goals', json=goals).json, expected)
         self.assertEqual(self.client.get('/api/records').json['goals'], expected)
-        detailed = {'items': [{'priority': 1, 'doing': 'Testing underway', 'goal': 'Understand the cause', 'direction': 'Discuss next steps'}], 'questions': []}
-        self.assertEqual(self.client.post('/api/goals', json=detailed).json, detailed)
-        self.assertEqual(self.client.post('/api/goals', json={'items': [{'doing': 123}], 'questions': []}).status_code, 400)
+        detailed = {'current_visit': {'date': '', 'items': [{'doing': 'Testing underway', 'goal': 'Understand the cause', 'direction': 'Discuss next steps', 'addressed': False}], 'questions': []},
+                    'visits': [{'date': '2026-10-19', 'closed_at': '2026-10-19', 'items': [{'doing': '', 'goal': 'Prior item', 'direction': '', 'addressed': True}], 'questions': []}],
+                    'issues': [{'title': 'Fatigue', 'detail': 'Track over time'}]}
+        expected_detailed = {'current_visit': {'date': '', 'items': [{'priority': 1, 'doing': 'Testing underway', 'goal': 'Understand the cause', 'direction': 'Discuss next steps', 'addressed': False}], 'questions': []},
+                            'visits': [{'date': '2026-10-19', 'items': [{'priority': 1, 'doing': '', 'goal': 'Prior item', 'direction': '', 'addressed': True}], 'questions': [], 'closed_at': '2026-10-19'}],
+                            'issues': [{'title': 'Fatigue', 'detail': 'Track over time'}]}
+        self.assertEqual(self.client.post('/api/goals', json=detailed).json, expected_detailed)
+        self.assertEqual(self.client.post('/api/goals', json={'current_visit': {'date': '', 'items': [{'doing': 123}], 'questions': []}, 'visits': [], 'issues': []}).status_code, 400)
         with self.client.session_transaction() as session:
             session['user'] = 'sample-b'
-        self.assertEqual(self.client.get('/api/records').json['goals'], {'items': [], 'questions': []})
+        self.assertEqual(self.client.get('/api/records').json['goals'], {'current_visit': {'date': '', 'items': [], 'questions': []}, 'visits': [], 'issues': []})
         self.assertEqual(self.client.post('/api/goals', json={'items': 'invalid'}).status_code, 400)
 
     def test_clinical_records_and_source_documents_remain_account_scoped(self):

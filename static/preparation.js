@@ -39,13 +39,12 @@
     const cancel = el('button', { type: 'button', class: 'outline-button compact' }, 'Cancel');
     const editor = el('details', { class: 'owner-only section-editor' }, el('summary', {}, 'Edit summary & notes'), form);
     form.append(el('label', {}, 'Summary for the provider', summary), el('label', {}, 'Notes', notes),
-      el('p', { class: 'vital-meta' }, 'Saved summaries and notes appear in Provider view as patient-provided information.'),
+      el('p', { class: 'vital-meta' }, 'Saved summaries and notes appear in Provider view.'),
       el('div', { class: 'editor-actions' }, save, cancel), message);
     function render() {
       summary.value = value.summary; notes.value = value.notes;
       display.replaceChildren();
       if (value.summary || value.notes) {
-        display.append(el('p', { class: 'patient-label' }, 'Patient-provided'));
         if (value.summary) display.append(el('h2', {}, 'Summary'), el('p', { class: 'patient-text' }, value.summary));
         if (value.notes) display.append(el('details', { class: 'patient-notes' }, el('summary', {}, 'Notes'), el('p', { class: 'patient-text' }, value.notes)));
       }
@@ -83,7 +82,7 @@
     else modalDirty = false;
   });
   const recordKeys = row => row.sources?.length ? row.sources.map(source => source._key) : [row._key];
-  async function refreshRecords(message = 'Patient update saved.', table = '') {
+  async function refreshRecords(message = 'Note saved.', table = '') {
     modalDirty = false;
     dialog.close();
     const refreshed = ['measurements', 'cycles'].includes(table) ? await chart.reloadVitals() : await chart.reloadClinical();
@@ -104,7 +103,7 @@
     form.append(el('h2', { id: 'record-editor-title' }, title),
       el('p', { class: 'vital-meta' }, table === 'documents'
         ? 'This changes the summary shown in your chart. The source PDF stays unchanged.'
-        : row?.document ? 'Your update is shown separately from the original source record.' : 'This will be labeled as patient-entered information.'));
+        : row?.document ? 'Your edits appear as a note alongside the record.' : 'You can edit or remove this entry later.'));
     for (const [field, label] of Object.entries(labels[table])) {
       let input;
       if (field === 'status') {
@@ -145,17 +144,6 @@
       });
       actions.append(remove);
     }
-    if (row && table !== 'documents' && !row._manual && row._original) {
-      const reset = el('button', { type: 'button', class: 'text-button' }, 'Restore original record');
-      reset.addEventListener('click', async () => {
-        if (chart.mode !== 'owner' || !confirm('Remove your update and notes, and show the original record?')) return;
-        const controls = [...form.querySelectorAll('button, input, textarea, select')];
-        controls.forEach(control => { control.disabled = true; });
-        try { await write(url, 'DELETE'); await refreshRecords('Patient update removed.', table); }
-        catch (failure) { error.textContent = failure.message; controls.forEach(control => { control.disabled = false; }); }
-      });
-      actions.append(reset);
-    }
     form.append(actions, error);
     form.addEventListener('input', () => { modalDirty = true; });
     form.addEventListener('submit', async event => {
@@ -169,7 +157,7 @@
       }
       const controls = [...form.querySelectorAll('button, input, textarea, select')];
       controls.forEach(control => { control.disabled = true; });
-      try { await write(url, row ? 'PUT' : 'POST', { fields, notes: notes.value }); await refreshRecords('Patient update saved.', table); }
+      try { await write(url, row ? 'PUT' : 'POST', { fields, notes: notes.value }); await refreshRecords('Note saved.', table); }
       catch (failure) { error.textContent = failure.message; controls.forEach(control => { control.disabled = false; }); }
     });
     dialog.append(form); modalDirty = false; dialog.showModal();
@@ -198,11 +186,10 @@
   };
   const decorate = (container, table, row) => {
     if (table === 'family_history') {
-      if (row._manual) container.append(el('p', { class: 'patient-label' }, 'Patient-entered'));
       if (row._patient_updated || row._patient_note) {
-        const update = el('details', { class: 'family-patient-update' },
-          el('summary', {}, row._patient_updated ? 'Patient update' : 'Patient note'));
+        const update = el('details', { class: 'family-patient-update' }, el('summary', {}, 'Note'));
         if (row._patient_note) update.append(el('p', {}, row._patient_note));
+        else update.append(el('p', {}, 'Edited condition details are shown above.'));
         container.append(update);
       }
       const edit = el('button', { type: 'button', class: 'text-button owner-only edit-record' }, 'Edit / add notes');
@@ -210,16 +197,9 @@
       container.append(edit);
       return container;
     }
-    if (row._manual || row._patient_updated || row._patient_note) {
-      container.append(el('p', { class: 'patient-label' }, row._manual ? 'Patient-entered' : row._patient_updated ? 'Patient update' : 'Patient note'));
+    if (row._patient_updated || row._patient_note) {
+      container.append(el('p', { class: 'patient-label' }, 'Note'));
       if (row._patient_note) container.append(el('p', { class: 'patient-text' }, row._patient_note));
-      if (row._patient_updated) {
-        const original = el('details', { class: 'original-record' }, el('summary', {}, 'Original recorded details'));
-        for (const [field, label] of Object.entries(labels[table])) {
-          if (row._original?.[field]) original.append(el('p', {}, el('b', {}, `${label}: `), row._original[field]));
-        }
-        container.append(original);
-      }
     }
     const edit = el('button', { type: 'button', class: 'text-button owner-only edit-record' }, table === 'lab_results' ? 'Edit notes' : table === 'documents' ? 'Edit summary' : 'Edit / add notes');
     edit.addEventListener('click', () => editRecord(table, row));
@@ -258,7 +238,7 @@
         const restore = el('button', { type: 'button', class: 'outline-button compact' }, 'Restore entry');
         const error = el('p', { class: 'save-status', role: 'alert' });
         const title = row.name || row.substance || row.title || row.test || row.label || (row.metric ? `${row.metric} · ${row.taken_at}` : '') || (row.start ? `Menstrual cycle · ${row.start}` : '') || row.document || [row.relation, row.condition].filter(Boolean).join(' · ');
-        const dates = [row.date || row.taken_at, row._manual ? 'Patient-entered' : 'Source record', recordKeys(row).length > 1 ? `${recordKeys(row).length} records` : null].filter(Boolean).join(' · ');
+        const dates = [row.date || row.taken_at, recordKeys(row).length > 1 ? `${recordKeys(row).length} records` : null].filter(Boolean).join(' · ');
         const entry = el('article', { class: 'deleted-entry' }, el('div', {}, el('b', {}, title), el('p', { class: 'vital-meta' }, dates)), restore, error);
         restore.addEventListener('click', async () => {
           if (chart.mode !== 'owner') return;

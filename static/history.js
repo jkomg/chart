@@ -55,7 +55,7 @@
     }
     search.addEventListener('input', draw);
     body('history', el('div', { class: 'editor-actions owner-only' }, chart.preparation.addButton('diagnoses'), chart.preparation.addButton('allergies'), chart.preparation.addButton('events')), el('div', { class: 'filter-row plain' }, search),
-      el('p', { class: 'vital-meta' }, 'Dates and status reflect source records or labeled patient updates; confirm current status at the visit.'), status, results);
+      el('p', { class: 'vital-meta' }, 'Dates and status reflect source records or notes; confirm current status at the visit.'), status, results);
     draw();
   };
 })();

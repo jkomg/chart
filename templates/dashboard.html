@@ -13,7 +13,7 @@
       <div class="presentation-controls owner-only"><p class="nav-label">Prepare your visit</p><button type="button" class="primary-button mode-action" data-mode="provider">Present to provider <span aria-hidden="true">↗</span></button></div>
       <nav class="nav" aria-label="Primary">
         <p class="nav-label">Workspace</p>
-        <button class="nav-item active" data-tab="goals"><span class="nav-icon">◎</span>Visit priorities{% if records.goals["items"] %} <em>{{ records.goals["items"]|length }}</em>{% endif %}</button>
+        <button class="nav-item active" data-tab="goals"><span class="nav-icon">◎</span>Issues{% if records.goals["issues"] %} <em>{{ records.goals["issues"]|length }}</em>{% endif %}</button>
         <button class="nav-item" data-tab="history"><span class="nav-icon">◌</span>Medical history</button>
         <button class="nav-item" data-tab="medications"><span class="nav-icon">＋</span>Medications</button>
         <button class="nav-item" data-tab="labs"><span class="nav-icon">⌁</span>Labs</button>
@@ -25,14 +25,19 @@
       <div class="sidebar-bottom"><button type="button" class="exit-presentation mode-action" data-mode="owner" title="Return to Prepare to edit your chart">Exit presentation</button><div class="sync-status"><span></span><div><b>Private workspace</b><small>Encrypted in transit</small></div></div><form method="post" action="{{ url_for('logout') }}"><button class="logout-button">Sign out <span>↗</span></button></form></div>
     </aside>
     <main class="main-content">
-      <header class="topbar"><div class="breadcrumb" data-root="{{ current_user|upper }}">{{ current_user|upper }} <span>/</span> <b>VISIT PRIORITIES</b></div><div class="view-label owner-only">{{ current_user|capitalize }} · <span id="view-label">Provider view</span></div></header>
+      <header class="topbar"><div class="breadcrumb" data-root="{{ current_user|upper }}">{{ current_user|upper }} <span>/</span> <b>ISSUES</b></div><div class="view-label owner-only">{{ current_user|capitalize }} · <span id="view-label">Provider view</span></div></header>
       <div class="content-wrap">
         <section class="tab-panel active" id="goals">
-          <div class="page-heading"><div><h1>Visit priorities</h1><p class="subtitle">What matters most for this appointment.</p></div></div>
-          <p class="owner-only preparation-note">Build a focused agenda for the appointment. Each numbered priority has three clear parts: what’s being done, the goal, and the clinical direction you’re requesting. Use the arrows to rank priorities.</p>
-          <div class="goal-list priority-list" data-key="items" data-label="priority" data-empty="No priorities added yet."></div>
-          <div class="section-row"><h2 class="section-title">Questions for this visit</h2></div>
-          <div class="goal-list" data-key="questions" data-label="question" data-empty="No questions added yet."></div>
+          <div class="page-heading"><div><h1>Issues</h1><p class="subtitle">Ongoing concerns and priorities for each appointment.</p></div></div>
+          <section class="visit-priorities" aria-labelledby="active-visit-title">
+            <div class="visit-agenda-heading"><div><p class="eyebrow">CURRENT APPOINTMENT</p><h2 id="active-visit-title">Visit priorities</h2></div><label class="visit-date-label">Visit date<input class="visit-date" type="date" aria-label="Visit date"></label><button type="button" class="outline-button compact close-visit owner-only">Close visit</button></div>
+            <p class="owner-only preparation-note">Rank the priorities for this appointment. When you close the visit, unaddressed priorities carry forward.</p>
+            <div class="goal-list priority-list" data-key="items" data-label="priority" data-empty="No priorities added yet."></div>
+            <div class="section-row"><h3 class="section-title">Questions for this visit</h3></div>
+            <div class="goal-list" data-key="questions" data-label="question" data-empty="No questions added yet."></div>
+          </section>
+          <section class="visit-history-area"><div class="section-row"><h2 class="section-title">Previous visits</h2></div><div class="visit-history"></div></section>
+          <section class="ongoing-issues-area"><div class="section-row"><h2 class="section-title">Other issues</h2></div><div class="issues-list"></div></section>
           <script type="application/json" id="goals-data">{{ records.goals|tojson }}</script>
         </section>
         <section class="tab-panel" id="history"><div class="page-heading"><div><h1>Medical history</h1><p class="subtitle">Conditions, allergies, procedures, and past visits.</p></div></div><div class="data-body" aria-live="polite"><p>Loading medical history…</p></div></section>

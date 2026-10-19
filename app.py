@@ -5,6 +5,7 @@ import json
 import mimetypes
 import os
 import secrets
+from datetime import date
 from pathlib import Path
 
 import libsql
@@ -40,6 +41,41 @@ DEFAULT_RECORDS = {
     "medications": [{"name": "Add medication or supplement", "dose": "Dose", "schedule": "Schedule", "status": "Current"}],
     "synopsis": "This is a private workspace for organizing medical records. It is not medical advice. Add a concise, clinician-friendly synopsis once the source records are uploaded.",
 }
+
+
+def normalize_visit_items(items):
+    normalized = []
+    if isinstance(items, list):
+        for index, item in enumerate(items, 1):
+            if isinstance(item, str):
+                normalized.append({"priority": index, "doing": "", "goal": item, "direction": "", "addressed": False})
+            elif isinstance(item, dict):
+                normalized.append({"priority": index, "doing": item.get("doing", ""), "goal": item.get("goal", ""),
+                                   "direction": item.get("direction", ""), "addressed": bool(item.get("addressed", False))})
+    return normalized
+
+
+def normalize_goals(goals):
+    goals = goals if isinstance(goals, dict) else {}
+    if isinstance(goals.get("current_visit"), dict):
+        active = goals["current_visit"]
+    else:  # Convert the original flat priority list into the current visit.
+        active = {"items": goals.get("items", []), "questions": goals.get("questions", [])}
+    current = {
+        "date": active.get("date", "") if isinstance(active.get("date", ""), str) else "",
+        "items": normalize_visit_items(active.get("items", [])),
+        "questions": active.get("questions", []) if isinstance(active.get("questions", []), list) else [],
+    }
+    visits = []
+    for visit in goals.get("visits", []) if isinstance(goals.get("visits", []), list) else []:
+        if not isinstance(visit, dict):
+            continue
+        visits.append({"date": visit.get("date", "") if isinstance(visit.get("date", ""), str) else "",
+                       "closed_at": visit.get("closed_at", "") if isinstance(visit.get("closed_at", ""), str) else "",
+                       "items": normalize_visit_items(visit.get("items", [])),
+                       "questions": visit.get("questions", []) if isinstance(visit.get("questions", []), list) else []})
+    issues = goals.get("issues", []) if isinstance(goals.get("issues", []), list) else []
+    return {"current_visit": current, "visits": visits, "issues": issues}
 
 
 def get_db():
@@ -89,17 +125,7 @@ def check_password(password: str, stored: str) -> bool:
 def load_records(user: str) -> dict:
     row = get_db().execute("SELECT data FROM user_records WHERE username = ?", (user,)).fetchone()
     records = json.loads(row[0]) if row else copy.deepcopy(DEFAULT_RECORDS)
-    goals = records.get("goals") if isinstance(records.get("goals"), dict) else {}
-    items = goals.get("items", [])
-    normalized = []
-    if isinstance(items, list):
-        for index, item in enumerate(items, 1):
-            if isinstance(item, str):
-                normalized.append({"priority": index, "doing": "", "goal": item, "direction": ""})
-            elif isinstance(item, dict):
-                normalized.append({"priority": index, "doing": item.get("doing", ""), "goal": item.get("goal", ""), "direction": item.get("direction", "")})
-    questions = goals.get("questions", [])
-    records["goals"] = {"items": normalized, "questions": questions if isinstance(questions, list) else []}
+    records["goals"] = normalize_goals(records.get("goals"))
     return records
 
 
@@ -176,26 +202,65 @@ def goals_api():
         return jsonify({"error": "unauthorized"}), 401
     # JSON only: a cross-site form can't send it, so this doubles as CSRF protection.
     body = request.get_json(silent=True) if request.is_json else None
-    goals = {}
     if not isinstance(body, dict):
         return jsonify({"error": "Provide visit priorities and questions"}), 400
-    values = body.get("items")
-    if not isinstance(values, list) or len(values) > 100:
-        return jsonify({"error": "items must be a list of up to 100 priorities"}), 400
-    goals["items"] = []
-    for index, item in enumerate(values, 1):
-        if isinstance(item, str):  # accept old clients while converting their goals
-            item = {"doing": "", "goal": item, "direction": ""}
-        if not isinstance(item, dict) or set(item) - {"priority", "doing", "goal", "direction"}:
-            return jsonify({"error": "Each priority needs what is being done, a goal, and clinical direction"}), 400
-        if any(not isinstance(item.get(field, ""), str) or len(item.get(field, "")) > 5000 for field in ("doing", "goal", "direction")):
-            return jsonify({"error": "Priority details must be text up to 5,000 characters each"}), 400
-        goals["items"].append({"priority": index, "doing": item.get("doing", "").strip(), "goal": item.get("goal", "").strip(), "direction": item.get("direction", "").strip()})
-    for key in ("questions",):
-        values = (body or {}).get(key)
-        if not isinstance(values, list) or len(values) > 100 or not all(isinstance(v, str) and len(v) <= 2000 for v in values):
-            return jsonify({"error": f"{key} must be a list of strings"}), 400
-        goals[key] = [v.strip() for v in values if v.strip()]
+    active = body.get("current_visit")
+    if not isinstance(active, dict):
+        return jsonify({"error": "A current visit is required"}), 400
+
+    def valid_date(value):
+        if not isinstance(value, str) or len(value) > 10:
+            return False
+        if not value:
+            return True
+        try:
+            return date.fromisoformat(value).isoformat() == value
+        except ValueError:
+            return False
+
+    def clean_visit(visit, closed=False):
+        if not isinstance(visit, dict) or not valid_date(visit.get("date", "")):
+            raise ValueError("Visit dates must use YYYY-MM-DD")
+        items = visit.get("items")
+        questions = visit.get("questions")
+        if not isinstance(items, list) or len(items) > 100 or not isinstance(questions, list) or len(questions) > 100:
+            raise ValueError("Each visit can have up to 100 priorities and questions")
+        cleaned_items = []
+        for index, item in enumerate(items, 1):
+            if not isinstance(item, dict) or set(item) - {"priority", "doing", "goal", "direction", "addressed"}:
+                raise ValueError("Each priority must contain supported fields")
+            if any(not isinstance(item.get(field, ""), str) or len(item.get(field, "")) > 5000 for field in ("doing", "goal", "direction")):
+                raise ValueError("Priority details must be text up to 5,000 characters each")
+            if type(item.get("addressed", False)) is not bool:
+                raise ValueError("Priority addressed status must be true or false")
+            cleaned_items.append({"priority": index, "doing": item.get("doing", "").strip(), "goal": item.get("goal", "").strip(),
+                                  "direction": item.get("direction", "").strip(), "addressed": item.get("addressed", False)})
+        if not all(isinstance(value, str) and len(value) <= 2000 for value in questions):
+            raise ValueError("Visit questions must be text up to 2,000 characters each")
+        result = {"date": visit.get("date", ""), "items": cleaned_items, "questions": [value.strip() for value in questions if value.strip()]}
+        if closed:
+            closed_at = visit.get("closed_at", "")
+            if not valid_date(closed_at):
+                raise ValueError("Visit close dates must use YYYY-MM-DD")
+            result["closed_at"] = closed_at
+        return result
+
+    try:
+        goals = {"current_visit": clean_visit(active)}
+        visits = body.get("visits", [])
+        if not isinstance(visits, list) or len(visits) > 1000:
+            raise ValueError("Visit history must be a list of up to 1,000 visits")
+        goals["visits"] = [clean_visit(visit, closed=True) for visit in visits]
+        issues = body.get("issues", [])
+        if not isinstance(issues, list) or len(issues) > 100:
+            raise ValueError("Issues must be a list of up to 100 entries")
+        goals["issues"] = []
+        for issue in issues:
+            if not isinstance(issue, dict) or set(issue) != {"title", "detail"} or any(not isinstance(issue[key], str) or len(issue[key]) > 5000 for key in ("title", "detail")) or not issue["title"].strip():
+                raise ValueError("Each issue needs a title and text details")
+            goals["issues"].append({"title": issue["title"].strip(), "detail": issue["detail"].strip()})
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
     records = load_records(session["user"])
     records["goals"] = goals
     save_records(session["user"], records)

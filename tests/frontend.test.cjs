@@ -7,7 +7,7 @@ const { parseHTML } = require('linkedom');
 function environment(data = {}) {
   const { document, window } = parseHTML(`<html><body>
     ${['history', 'family', 'medications', 'documents', 'genetics'].map(id => `<section id="${id}"><div class="page-heading"></div><article class="preparation-section"><textarea>Unsaved ${id} draft</textarea></article><div class="starter">Starter content</div></section>`).join('')}
-    <section id="goals"><div class="goal-list priority-list" data-key="items" data-label="priority" data-empty="No priorities"></div><div class="goal-list" data-key="questions" data-label="question" data-empty="No questions"></div><script id="goals-data" type="application/json">${JSON.stringify(data.goals || { items: [], questions: [] })}</script></section>
+    <section id="goals"><input class="visit-date"><button class="close-visit"></button><div class="goal-list priority-list" data-key="items" data-label="priority" data-empty="No priorities"></div><div class="goal-list" data-key="questions" data-label="question" data-empty="No questions"></div><div class="visit-history"></div><div class="issues-list"></div><script id="goals-data" type="application/json">${JSON.stringify(data.goals || { items: [], questions: [] })}</script></section>
     <nav><button data-tab="documents"><em>0</em></button><button class="nav-item" data-tab="goals"></button></nav>
   </body></html>`);
   const el = (tag, attrs = {}, ...kids) => {
@@ -17,11 +17,11 @@ function environment(data = {}) {
     return node;
   };
   const openedSources = [];
-  const chart = { mode: 'owner', openDoc: (document, page) => openedSources.push([document, page]), renderLabs() {} };
+  const chart = { mode: 'owner', openDoc: (document, page) => openedSources.push([document, page]), renderLabs() {}, toast() {} };
   const includedSources = new Set(data.includedSources || []);
   const requests = [];
   const clinical = { documents: [], events: [], diagnoses: [], allergies: [], medications: [], family_history: [], clinical_genetics: [], lab_results: [], ...data };
-  const context = vm.createContext({ document, window, chart,
+  const context = vm.createContext({ document, window, chart, confirm: () => true,
     fetch: async (url, options = {}) => {
       if (url === '/api/goals') {
         const payload = JSON.parse(options.body); requests.push(payload);
@@ -44,7 +44,6 @@ function environment(data = {}) {
     },
     addButton: (_table, label = 'Add') => el('button', {}, label),
     decorate: (container, table, row) => {
-      if (row._manual) container.append(el('p', { class: 'patient-label' }, 'Patient-entered'));
       container.append(el('button', { 'data-key': row._key, class: 'edit-record' }, 'Edit / add notes'));
     }
   };
@@ -52,7 +51,7 @@ function environment(data = {}) {
 }
 const settled = () => new Promise(resolve => setImmediate(resolve));
 
-test('Visit priorities show and save the three structured details with an explicit rank', async () => {
+test('Issues starts with visit priorities and saves the three structured details', async () => {
   const { chart, document, run, window, requests } = environment({ goals: {
     items: [{ priority: 1, doing: 'Labs ordered', goal: 'Understand fatigue', direction: 'Discuss next steps' }], questions: []
   } });
@@ -69,11 +68,47 @@ test('Visit priorities show and save the three structured details with an explic
   assert.equal(chart.hasUnsavedPreparation(), true);
   priority.querySelector('form').dispatchEvent(new window.Event('submit', { cancelable: true }));
   await settled();
-  assert.equal(requests.at(-1).items[0].goal, 'Find the cause of fatigue');
-  assert.equal(requests.at(-1).items[0].doing, 'Labs ordered');
-  assert.equal(requests.at(-1).items[0].direction, 'Discuss next steps');
-  assert.equal(requests.at(-1).items[0].priority, 1);
+  assert.equal(requests.at(-1).current_visit.items[0].goal, 'Find the cause of fatigue');
+  assert.equal(requests.at(-1).current_visit.items[0].doing, 'Labs ordered');
+  assert.equal(requests.at(-1).current_visit.items[0].direction, 'Discuss next steps');
+  assert.equal(requests.at(-1).current_visit.items[0].priority, 1);
   assert.equal(chart.hasUnsavedPreparation(), false);
+});
+
+test('Closing a visit archives its priorities and carries unaddressed ones forward', async () => {
+  const { document, run, window, requests } = environment({ goals: {
+    current_visit: { date: '', items: [
+      { doing: 'Lab ordered', goal: 'Understand results', direction: 'Review options', addressed: true },
+      { doing: '', goal: 'Discuss pain', direction: 'Plan follow-up', addressed: false }
+    ], questions: ['What next?'] }, visits: [], issues: []
+  } });
+  run('goals');
+  const date = document.querySelector('.visit-date');
+  date.value = '2026-10-19'; date.dispatchEvent(new window.Event('change'));
+  await settled();
+  document.querySelector('.close-visit').dispatchEvent(new window.Event('click'));
+  await settled();
+  const saved = requests.at(-1);
+  assert.equal(saved.visits.length, 1);
+  assert.equal(saved.visits[0].date, '2026-10-19');
+  assert.equal(saved.visits[0].items[0].addressed, true);
+  assert.deepEqual(saved.current_visit.items.map(item => item.goal), ['Discuss pain']);
+  assert.deepEqual(saved.current_visit.questions, []);
+  assert.equal(document.querySelectorAll('.visit-history-entry').length, 1);
+});
+
+test('Ongoing issues can be added and promoted to current visit priorities', async () => {
+  const { document, run, requests, window } = environment();
+  run('goals');
+  const form = document.querySelector('.issue-new-form');
+  form.querySelector('[aria-label="New issue"]').value = 'Recurring headaches';
+  form.querySelector('[aria-label="New issue details"]').value = 'Track frequency and severity';
+  form.dispatchEvent(new window.Event('submit', { cancelable: true }));
+  await settled();
+  assert.deepEqual(requests.at(-1).issues[0], { title: 'Recurring headaches', detail: 'Track frequency and severity' });
+  document.querySelector('.ongoing-issue .issue-actions .outline-button').click();
+  await settled();
+  assert.equal(requests.at(-1).current_visit.items[0].goal, 'Recurring headaches');
 });
 
 test('Documents and Genetics retain preparation content during initial and repeated rendering', async () => {
@@ -179,7 +214,7 @@ for (const [table, section, selector] of [['diagnoses', 'history', '.history-ent
     for (const key of ['imported-latest', 'manual-undated', 'manual-dated', 'manual-second']) {
       assert.equal(document.querySelectorAll(`#${section} .edit-record[data-key="${key}"]`).length, 1);
     }
-    assert.equal(document.querySelectorAll(`#${section} .patient-label`).length, 3);
+    assert.equal(document.querySelectorAll(`#${section} .patient-label`).length, 0);
     assert.equal(document.querySelectorAll(`#${section} .edit-record[data-key="imported-old"]`).length, 0);
     if (section === 'history') assert.ok(document.querySelector(`#${section} .condition-sources`).textContent.includes('2 source records'));
   });
@@ -207,7 +242,7 @@ function editorEnvironment() {
   return env;
 }
 
-test('Family history keeps patient updates quiet and omits the original-details heading', () => {
+test('Patient notes stay quiet without separate source-detail panels', () => {
   const { chart, document } = editorEnvironment();
   const card = document.createElement('article'); document.body.append(card);
   chart.preparation.decorate(card, 'family_history', {
@@ -217,10 +252,14 @@ test('Family history keeps patient updates quiet and omits the original-details 
   const update = card.querySelector('.family-patient-update');
   assert.ok(update);
   assert.equal(update.hasAttribute('open'), false, 'the update is collapsed by default');
-  assert.equal(update.querySelector('summary').textContent, 'Patient update');
+  assert.equal(update.querySelector('summary').textContent, 'Note');
   assert.ok(update.textContent.includes('Symptoms improved after treatment.'));
-  assert.equal(card.textContent.includes('Original recorded details'), false);
+  assert.equal(card.querySelector('details.original-record'), null);
   assert.ok(card.querySelector('.edit-record'));
+  const diagnosis = document.createElement('article'); document.body.append(diagnosis);
+  chart.preparation.decorate(diagnosis, 'diagnoses', { name: 'Example condition', _patient_updated: true, _original: { name: 'Old value' }, _key: 'condition' });
+  assert.equal(diagnosis.querySelector('.patient-label').textContent, 'Note');
+  assert.equal(diagnosis.querySelector('details'), null);
 });
 
 test('Medical record edit changes the page summary without offering source-record deletion', async () => {

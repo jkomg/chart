@@ -185,7 +185,7 @@
               g.numeric.length >= 2 ? sparkline(g.numeric) : el('span', { class: 'spark' }),
               el('span', { class: 'lab-value' }, valueText(g.latest)),
               el('span', { class: 'lab-flag' }, flagChip(g.latest.flag, g.latest.flag_calculated) || ''),
-              el('span', { class: 'lab-ref' }, (refText(g.latest) ? `Reference: ${refText(g.latest)}` : 'Reference range not reported') + (g.rows.some(r => r._patient_note) ? ' · Patient note available in history' : '')));
+              el('span', { class: 'lab-ref' }, (refText(g.latest) ? `Reference: ${refText(g.latest)}` : 'Reference range not reported') + (g.rows.some(r => r._patient_note) ? ' · Note available in history' : '')));
             const wrap = el('div', { class: 'lab-wrap' }, row);
             if (open) wrap.append(labDetail(g));
             row.addEventListener('click', () => {
