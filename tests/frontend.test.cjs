@@ -223,6 +223,32 @@ test('Family history keeps patient updates quiet and omits the original-details 
   assert.ok(card.querySelector('.edit-record'));
 });
 
+test('Medical record edit changes the page summary without offering source-record deletion', async () => {
+  const env = editorEnvironment();
+  const { chart, document, dialog, requests } = env;
+  const card = document.createElement('article'); document.body.append(card);
+  chart.preparation.decorate(card, 'documents', {
+    document: 'visit.pdf', title: 'Visit note', date: '2025-01-02', provider: 'Clinic',
+    clinician: 'Dr. Example', kind: 'visit', summary: 'Original summary', _key: 'document-key'
+  });
+  card.querySelector('.edit-record').click();
+  assert.equal(dialog.open, true);
+  assert.equal(card.querySelector('.edit-record').textContent, 'Edit summary');
+  assert.equal(dialog.querySelector('#record-editor-title').textContent, 'Edit medical record summary');
+  assert.equal(dialog.querySelector('.danger-button'), null);
+  for (const [label, value] of [['Summary shown on the Medical records page', 'New concise summary'], ['Notes for the provider', 'Review this report']]) {
+    const field = [...dialog.querySelectorAll('label')].find(node => node.textContent.includes(label)).querySelector('input, textarea');
+    field.value = value;
+  }
+  dialog.querySelector('form').dispatchEvent(new env.window.Event('submit', { cancelable: true }));
+  await settled();
+  const saved = requests.find(request => request.url.includes('/entries/documents/'));
+  assert.ok(saved);
+  assert.equal(saved.body.fields.summary, 'New concise summary');
+  assert.deepEqual(Object.keys(saved.body.fields), ['summary']);
+  assert.equal(saved.body.notes, 'Review this report');
+});
+
 test('Delete entry confirms, removes the complete source group, and preserves drafts on failure', async () => {
   const env = editorEnvironment();
   const { chart, document, dialog } = env;
