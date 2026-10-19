@@ -26,7 +26,7 @@ function environment(data = {}) {
   run('record-groups');
   chart.preparation = {
     renderDeleted() {},
-    addButton: () => el('button', {}, 'Add'),
+    addButton: (_table, label = 'Add') => el('button', {}, label),
     decorate: (container, table, row) => {
       if (row._manual) container.append(el('p', { class: 'patient-label' }, 'Patient-entered'));
       container.append(el('button', { 'data-key': row._key, class: 'edit-record' }, 'Edit / add notes'));
@@ -54,6 +54,24 @@ test('Documents and Genetics retain preparation content during initial and repea
     await chart.reloadClinical();
     await settled();
   }
+});
+
+test('Family history renders one expandable profile per relative with their own conditions', async () => {
+  const { document, run } = environment({ family_history: [
+    { relation: 'Mom', condition: 'Asthma', _key: 'mom-asthma' },
+    { relation: 'Mom', condition: 'Migraine', _key: 'mom-migraine' },
+    { relation: 'Dad', condition: 'Diabetes', _key: 'dad-diabetes' }
+  ] });
+  run('history'); run('records'); await settled();
+  const profiles = [...document.querySelectorAll('#family .family-profile')];
+  assert.equal(profiles.length, 2);
+  const mom = profiles.find(profile => profile.querySelector('.family-profile-name').textContent === 'Mom');
+  const dad = profiles.find(profile => profile.querySelector('.family-profile-name').textContent === 'Dad');
+  assert.deepEqual([...mom.querySelectorAll('.family-condition h2')].map(node => node.textContent), ['Asthma', 'Migraine']);
+  assert.deepEqual([...dad.querySelectorAll('.family-condition h2')].map(node => node.textContent), ['Diabetes']);
+  assert.equal(mom.querySelectorAll('.family-condition .edit-record').length, 2);
+  assert.equal(mom.querySelectorAll('.family-condition .family-delete').length, 2);
+  assert.equal([...mom.querySelectorAll('.family-profile-content button')].at(-1).textContent, 'Add condition');
 });
 
 for (const [table, section, selector] of [['diagnoses', 'history', '.history-entry'], ['medications', 'medications', '.medication-row']]) {
@@ -125,6 +143,18 @@ test('Delete entry confirms, removes the complete source group, and preserves dr
   assert.equal(dialog.open, false);
   assert.equal(env.toast, 'Entry deleted.');
   assert.equal(env.refreshes, 1);
+});
+
+test('Adding a family history item from a profile keeps that relative preselected', async () => {
+  const env = editorEnvironment();
+  const { chart, dialog, window } = env;
+  chart.preparation.addButton('family_history', 'Add condition', { relation: 'Mom' }).click();
+  assert.match(dialog.querySelector('h2').textContent, /Mom/);
+  assert.equal(dialog.querySelector('input').value, 'Mom');
+  dialog.querySelector('form').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+  await settled();
+  assert.equal(env.requests.at(-1).url, '/api/preparation/entries/family_history');
+  assert.deepEqual(env.requests.at(-1).body, { fields: { relation: 'Mom', condition: '' }, notes: '' });
 });
 
 test('Deleted entries can be restored in Prepare and remain unavailable in Provider mode', async () => {

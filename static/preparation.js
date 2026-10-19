@@ -86,12 +86,17 @@
     const refreshed = await chart.reloadClinical();
     chart.toast(refreshed ? message : 'Saved. Reload to refresh your records.');
   }
-  function editRecord(table, row) {
+  function editRecord(table, row, defaults = {}) {
     if (chart.mode !== 'owner') return;
     dialog.replaceChildren();
     const form = el('form', { class: 'preparation-form' });
     const inputs = {};
-    form.append(el('h2', { id: 'record-editor-title' }, `${row ? 'Edit' : 'Add'} ${titles[table]}`),
+    const title = table === 'family_history' && defaults.newFamilyMember
+      ? 'Add family member'
+      : table === 'family_history' && defaults.relation
+      ? `${row ? 'Edit' : 'Add'} family history for ${defaults.relation}`
+      : `${row ? 'Edit' : 'Add'} ${titles[table]}`;
+    form.append(el('h2', { id: 'record-editor-title' }, title),
       el('p', { class: 'vital-meta' }, row?.document ? 'Your update is shown separately from the original source record.' : 'This will be labeled as patient-entered information.'));
     for (const [field, label] of Object.entries(labels[table])) {
       let input;
@@ -103,7 +108,7 @@
         input.value = ['active', 'suspected', 'history', 'resolved'].includes(current.toLowerCase()) ? current.toLowerCase() : current;
       } else {
         input = ['note', 'detail'].includes(field) ? el('textarea', { rows: 3, maxlength: 2000 }) : el('input', { type: field === 'date' ? 'date' : 'text', maxlength: 2000 });
-        input.value = row?.[field] || '';
+        input.value = row?.[field] ?? defaults[field] ?? '';
       }
       inputs[field] = input;
       form.append(el('label', {}, label, input));
@@ -162,9 +167,9 @@
     });
     dialog.append(form); modalDirty = false; dialog.showModal();
   }
-  const addButton = (table, label) => {
+  const addButton = (table, label, defaults = {}) => {
     const button = el('button', { type: 'button', class: 'outline-button compact owner-only' }, label || `Add ${titles[table]}`);
-    button.addEventListener('click', () => editRecord(table));
+    button.addEventListener('click', () => editRecord(table, null, defaults));
     return button;
   };
   const decorate = (container, table, row) => {

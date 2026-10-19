@@ -16,13 +16,38 @@
   // ---------- family history ----------
   function renderFamily() {
     const list = el('div', { class: 'family-grid' });
+    const members = new Map();
     for (const row of data.family_history) {
-      const card = el('article', { class: 'family-card' }, el('p', { class: 'eyebrow' }, row.relation), el('h2', {}, row.condition));
-      if (row.document) card.append(sourceButton(row.document, row.page));
-      chart.preparation.decorate(card, 'family_history', row);
-      list.append(card);
+      const relation = (row.relation || 'Family member').trim();
+      const key = relation.toLocaleLowerCase();
+      if (!members.has(key)) members.set(key, { relation, rows: [] });
+      members.get(key).rows.push(row);
     }
-    body('family', chart.preparation.addButton('family_history'), data.family_history.length ? list : el('p', {}, 'No family history recorded.'));
+    for (const { relation, rows } of members.values()) {
+      const conditions = rows.filter(row => row.condition?.trim());
+      const profile = el('details', { class: 'family-profile' },
+        el('summary', { class: 'family-profile-summary' },
+          el('span', { class: 'profile-avatar' }, relation.slice(0, 1).toUpperCase()),
+          el('span', { class: 'family-profile-name' }, relation),
+          el('span', { class: 'family-profile-count' }, `${conditions.length} ${conditions.length === 1 ? 'condition' : 'conditions'}`),
+          el('span', { class: 'family-profile-chevron', 'aria-hidden': 'true' }, '⌄')),
+        el('div', { class: 'family-profile-content' }));
+      const content = profile.querySelector('.family-profile-content');
+      for (const row of rows) {
+        const item = el('article', { class: 'family-condition' },
+          el('div', {}, el('p', { class: 'eyebrow' }, 'Family history'), el('h2', {}, row.condition || 'No condition details recorded')));
+        if (row.document) item.append(sourceButton(row.document, row.page));
+        chart.preparation.decorate(item, 'family_history', row);
+        const remove = el('button', { type: 'button', class: 'text-button family-delete owner-only' }, 'Remove');
+        remove.addEventListener('click', () => chart.preparation.deleteRow('family_history', row));
+        item.append(remove);
+        content.append(item);
+      }
+      content.append(chart.preparation.addButton('family_history', 'Add condition', { relation }));
+      list.append(profile);
+    }
+    body('family', chart.preparation.addButton('family_history', 'Add family member', { newFamilyMember: true }),
+      members.size ? list : el('p', { class: 'family-empty' }, 'No family members added yet. Add a member to start a separate profile for their history.'));
   }
 
   // ---------- medications ----------
