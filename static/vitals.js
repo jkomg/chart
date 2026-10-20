@@ -11,7 +11,7 @@
   const canViewSource = filename => chart.clinicalUI?.canViewSource(filename) ?? true;
   const CHARTS = [
     { key: 'blood_pressure', label: 'Blood pressure', unit: 'mmHg', series: ['bp_systolic', 'bp_diastolic'] },
-    ...['resting_hr', 'weight', 'bmi', 'height', 'hrv_rmssd', 'hrv_sdnn', 'spo2', 'respiratory_rate', 'body_temp', 'temp_deviation', 'vo2max']
+    ...['resting_hr', 'weight', 'bmi', 'height', 'hrv_rmssd', 'hrv_sdnn', 'temp_deviation', 'vo2max']
       .map(key => ({ key, series: [key] })),
   ];
   // The server returns only the signed-in account's data; there is no way to ask for anyone else's.

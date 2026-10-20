@@ -3,7 +3,7 @@
 // starter content until this account has extracted data.
 (() => {
   const { el, day, sourceButton, canViewSource, body, chip } = chart.clinicalUI;
-  const KINDS = { lab: 'Lab results', genetic: 'Genetic test', visit: 'Visit', er: 'Emergency visit', imaging: 'Imaging',
+  const KINDS = { lab: 'Lab results', genetic: 'Genetic report', visit: 'Visit', er: 'Emergency visit', imaging: 'Imaging',
                   monitor: 'Monitoring', sleep: 'Sleep study', other: 'Document' };
   let data = null, docsByName = {};
   const uploadedDocuments = [...document.querySelectorAll('#documents .document-card')].map(a => decodeURIComponent(a.getAttribute('href').slice(5)));
@@ -178,6 +178,15 @@
     const clinicalRows = data.clinical_genetics;
     const kids = [];
     const tone = c => /^pathogenic|likely pathogenic/i.test(c || '') ? 'bad' : /uncertain|vus/i.test(c || '') ? 'warn' : /negative|benign/i.test(c || '') ? 'good' : '';
+
+    // Standalone reports belong in Genetics without pretending their contents are individual
+    // clinical findings. Their source remains governed by the Prepare source-selection flag.
+    for (const report of data.documents.filter(d => d.kind === 'genetic' && !clinicalRows.some(f => f.document === d.document))) {
+      kids.push(card(report.title || report.document,
+        el('p', { class: 'vital-meta' }, [day(report.date), report.provider, 'Genetic report'].filter(Boolean).join(' · ')),
+        report.summary ? el('p', { class: 'vital-meta' }, report.summary) : null,
+        canViewSource(report.document) ? sourceButton(report.document, null, 'Open report →') : null));
+    }
 
     if (clinicalRows.length) {
       const byDoc = new Map();
