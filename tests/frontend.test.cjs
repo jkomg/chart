@@ -261,7 +261,7 @@ function editorEnvironment() {
   return env;
 }
 
-test('Patient notes stay quiet without separate source-detail panels', () => {
+test('Family history notes stay inline in smaller text without source-detail panels', () => {
   const { chart, document } = editorEnvironment();
   const card = document.createElement('article'); document.body.append(card);
   chart.preparation.decorate(card, 'family_history', {
@@ -270,8 +270,8 @@ test('Patient notes stay quiet without separate source-detail panels', () => {
   });
   const update = card.querySelector('.family-patient-update');
   assert.ok(update);
-  assert.equal(update.hasAttribute('open'), false, 'the update is collapsed by default');
-  assert.equal(update.querySelector('summary').textContent, 'Note');
+  assert.equal(update.tagName, 'P', 'the note is directly visible instead of expandable');
+  assert.equal(update.querySelector('.family-note-label').textContent, 'Note');
   assert.ok(update.textContent.includes('Symptoms improved after treatment.'));
   assert.equal(card.querySelector('details.original-record'), null);
   assert.ok(card.querySelector('.edit-record'));
