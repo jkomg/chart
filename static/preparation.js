@@ -226,10 +226,9 @@
   const decorate = (container, table, row) => {
     if (table === 'family_history') {
       if (row._patient_updated || row._patient_note) {
-        const update = el('details', { class: 'family-patient-update' }, el('summary', {}, 'Note'));
-        if (row._patient_note) update.append(el('p', {}, row._patient_note));
-        else update.append(el('p', {}, 'Edited condition details are shown above.'));
-        container.append(update);
+        const note = el('p', { class: 'family-patient-update' }, el('span', { class: 'family-note-label' }, 'Note'),
+          row._patient_note || 'Edited condition details are shown above.');
+        container.append(note);
       }
       const edit = el('button', { type: 'button', class: 'text-button owner-only edit-record' }, 'Edit / add notes');
       edit.addEventListener('click', () => editRecord(table, row));

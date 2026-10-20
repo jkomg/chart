@@ -379,12 +379,8 @@ body[data-mode=provider] .sidebar-bottom form{display:none}
 .family-condition .eyebrow{margin:0;font-size:9px}
 .family-condition .source-link,.family-condition .patient-label,.family-condition .patient-text,.family-condition .edit-record{grid-column:1}
 .family-condition .patient-label{font-size:10px;color:#83908d;margin:4px 0 0}
-.family-patient-update{grid-column:1;color:#778680;font-size:11px;margin-top:3px}
-.family-patient-update summary{cursor:pointer;width:max-content;list-style:none}
-.family-patient-update summary::-webkit-details-marker{display:none}
-.family-patient-update summary::before{content:'＋';font-size:10px;margin-right:5px;color:#8b9b95}
-.family-patient-update[open] summary::before{content:'−'}
-.family-patient-update p{margin:6px 0 2px;padding:7px 10px;background:#f6f8f6;border-radius:7px;color:#62716e;line-height:1.45}
+.family-patient-update{grid-column:1;margin:4px 0 0;color:#778680;font-size:11px;line-height:1.45}
+.family-note-label{margin-right:6px;color:#87958f;font-size:10px;font-weight:600}
 .family-condition .family-delete{grid-column:2;grid-row:1 / span 5;align-self:center;color:#9a625a}
 .family-move{grid-column:1;font-size:11px;color:var(--teal)}
 .family-move summary{cursor:pointer;font-weight:600;width:max-content}
