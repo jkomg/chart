@@ -136,6 +136,21 @@ test('Documents and Genetics retain preparation content during initial and repea
   }
 });
 
+test('Standalone genetic reports appear in Genetics without being presented as clinical findings', async () => {
+  const { chart, document, run } = environment({ documents: [{
+    document: 'foundmyfitness_comprehensive_report_v9.pdf', title: 'FoundMyFitness Comprehensive Report (v9)',
+    date: '2025-06-26', provider: 'FoundMyFitness', kind: 'genetic',
+    summary: 'Consumer report generated from 23andMe genotype data. It presents genotype associations and wellness research summaries; it is not clinical genetic testing.'
+  }] });
+  chart.renderHistory = () => {};
+  run('records'); await settled();
+  const genetics = document.querySelector('#genetics .data-body');
+  assert.ok(genetics.textContent.includes('FoundMyFitness Comprehensive Report (v9)'));
+  assert.ok(genetics.textContent.includes('not clinical genetic testing'));
+  assert.equal(genetics.querySelector('.gene-row'), null);
+  assert.equal(genetics.querySelector('button')?.textContent, 'Open report →');
+});
+
 test('Provider view shows only flagged source documents and Prepare can select them', async () => {
   const { chart, document, run, window, openedSources } = environment({
     documents: [
