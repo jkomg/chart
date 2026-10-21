@@ -32,7 +32,7 @@
       for (const doc of data.documents) {
         const input = el('input', { type: 'checkbox', checked: provider.documents.includes(doc.filename), 'aria-label': doc.name });
         documentInputs.set(doc.filename, input);
-        const note = doc.included_in_presentation ? 'Source selected in Prepare' : 'Also enable this PDF in Medical records → Prepare';
+        const note = 'Selecting this makes the PDF available in Provider view';
         documentGroup.append(el('label', { class: 'provider-access-choice' }, input,
           el('span', {}, el('b', {}, doc.name), el('small', {}, note))));
       }
