@@ -7,6 +7,7 @@ const { parseHTML } = require('linkedom');
 function environment(data = {}) {
   const { document, window } = parseHTML(`<html><body>
     ${['history', 'family', 'medications', 'documents', 'genetics'].map(id => `<section id="${id}"><div class="page-heading"></div><article class="preparation-section"><textarea>Unsaved ${id} draft</textarea></article><div class="starter">Starter content</div></section>`).join('')}
+    <section id="provider-settings"><div class="provider-settings-body"></div></section>
     <section id="goals"><input class="visit-date"><button class="close-visit"></button><div class="goal-list priority-list" data-key="items" data-label="priority" data-empty="No priorities"></div><div class="goal-list" data-key="questions" data-label="question" data-empty="No questions"></div><div class="visit-history"></div><div class="issues-list"></div><script id="goals-data" type="application/json">${JSON.stringify(data.goals || { items: [], questions: [] })}</script></section>
     <nav><button data-tab="documents"><em>0</em></button><button class="nav-item" data-tab="goals"></button></nav>
   </body></html>`);
@@ -26,6 +27,15 @@ function environment(data = {}) {
       if (url === '/api/goals') {
         const payload = JSON.parse(options.body); requests.push(payload);
         return { ok: true, json: async () => payload };
+      }
+      if (url === '/api/provider-access') return { ok: true, json: async () => ({
+        providers: [{ username: 'amassmann', display_name: 'Dr. Massmann', sections: Object.fromEntries(['goals', 'history', 'medications', 'labs', 'vitals', 'family', 'genetics', 'documents'].map(key => [key, true])), documents: [] }],
+        documents: [{ filename: 'report.pdf', name: 'Report', included_in_presentation: false }],
+        sections: ['goals', 'history', 'medications', 'labs', 'vitals', 'family', 'genetics', 'documents']
+      }) };
+      if (url.startsWith('/api/provider-access/') && options.method === 'PUT') {
+        requests.push({ url, payload: JSON.parse(options.body) });
+        return { ok: true, json: async () => ({ ok: true }) };
       }
       return { ok: true, json: async () => url === '/api/genetics' ? { findings: [], sources: [] } : clinical };
     }
@@ -149,6 +159,20 @@ test('Standalone genetic reports appear in Genetics without being presented as c
   assert.ok(genetics.textContent.includes('not clinical genetic testing'));
   assert.equal(genetics.querySelector('.gene-row'), null);
   assert.equal(genetics.querySelector('button')?.textContent, 'Open report →');
+});
+
+test('Provider access settings render section and per-document checkboxes and save selections', async () => {
+  const { document, run, requests } = environment();
+  run('provider-settings'); await settled();
+  const host = document.querySelector('.provider-settings-body');
+  assert.ok(host.textContent.includes('Dr. Massmann'));
+  assert.equal(host.querySelectorAll('input[type="checkbox"]').length, 9);
+  const documentCheckbox = host.querySelector('[aria-label="Report"]');
+  assert.ok(documentCheckbox);
+  documentCheckbox.checked = true;
+  host.querySelector('button').click(); await settled();
+  assert.equal(requests.at(-1).url, '/api/provider-access/amassmann');
+  assert.deepEqual(requests.at(-1).payload.documents, ['report.pdf']);
 });
 
 test('Provider view shows only flagged source documents and Prepare can select them', async () => {
