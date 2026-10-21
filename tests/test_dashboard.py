@@ -4,6 +4,7 @@ from copy import deepcopy
 import sqlite3
 import tempfile
 import unittest
+import json
 from unittest.mock import patch
 
 import app
@@ -118,6 +119,77 @@ class DashboardTests(unittest.TestCase):
             session.clear()
         self.assertEqual(self.client.put('/api/preparation/sections/history', json=payload).status_code, 401)
         self.assertEqual(self.client.get('/api/preparation').status_code, 401)
+
+    def test_provider_login_requires_password_change_and_is_read_only(self):
+        conn = app.get_db()
+        conn.execute('INSERT INTO provider_accounts (username, password_hash, patient, display_name, must_change_password) VALUES (?, ?, ?, ?, ?)',
+                     ('amassmann', app.hash_password('Password1!'), 'mia', 'Dr. Massmann', 1))
+        conn.commit()
+        app.save_records('mia', {'goals': {'current_visit': {'items': [{'goal': 'Mia only'}], 'questions': []}}})
+        app.save_records('jason', {'goals': {'current_visit': {'items': [{'goal': 'Jason only'}], 'questions': []}}})
+        with self.client.session_transaction() as session:
+            session.clear()
+        response = self.client.post('/login', data={'username': 'amassmann', 'password': 'Password1!'})
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.headers['Location'], '/change-password')
+        self.assertEqual(self.client.get('/').headers['Location'], '/change-password')
+        self.assertEqual(self.client.get('/api/records').status_code, 403)
+        self.assertEqual(self.client.post('/change-password', data={
+            'current_password': 'Password1!', 'new_password': 'Password1!', 'confirm_password': 'Password1!'
+        }).status_code, 400)
+        changed = self.client.post('/change-password', data={
+            'current_password': 'Password1!', 'new_password': 'DrMassmann-New-Password-2026',
+            'confirm_password': 'DrMassmann-New-Password-2026'
+        })
+        self.assertEqual(changed.status_code, 302)
+        self.assertEqual(self.client.get('/api/records').json['goals']['current_visit']['items'][0]['goal'], 'Mia only')
+        page = self.client.get('/').get_data(as_text=True)
+        self.assertIn('data-mode="provider" data-account="mia" data-role="provider"', page)
+        self.assertIn('Dr. Massmann · Presentation mode', page)
+        self.assertEqual(self.client.post('/api/goals', json={'current_visit': {'items': [], 'questions': []}}).status_code, 403)
+        self.assertEqual(self.client.put('/api/preparation/sections/history', json={'summary': '', 'notes': ''}).status_code, 403)
+        row = app.provider_account('amassmann')
+        self.assertEqual(row[4], 0)
+        self.assertTrue(app.check_password('DrMassmann-New-Password-2026', row[1]))
+
+    def test_provider_permissions_filter_sections_and_individual_documents(self):
+        conn = app.get_db()
+        conn.execute('INSERT INTO provider_accounts (username, password_hash, patient, display_name, must_change_password) VALUES (?, ?, ?, ?, ?)',
+                     ('amassmann', app.hash_password('initial'), 'mia', 'Dr. Massmann', 0))
+        sections = {name: True for name in app.VISIBLE_SECTIONS}
+        sections['medications'] = False
+        conn.execute('INSERT INTO provider_access (username, sections, documents) VALUES (?, ?, ?)',
+                     ('amassmann', json.dumps(sections), json.dumps(['one.pdf'])))
+        conn.commit()
+        app.clinical.replace_document(conn, 'mia', {
+            'document': 'one.pdf', 'title': 'One', 'medications': [{'name': 'Hidden medication', 'page': 1}]
+        })
+        app.clinical.replace_document(conn, 'mia', {
+            'document': 'two.pdf', 'title': 'Two', 'medications': [{'name': 'Another hidden medication', 'page': 1}]
+        })
+        app.preparation.save(conn, 'mia', 'source:one.pdf', {'included': True})
+        app.preparation.save(conn, 'mia', 'source:two.pdf', {'included': True})
+        docs_dir = Path(self.temp.name) / 'mia'
+        docs_dir.mkdir()
+        (docs_dir / 'one.pdf').write_bytes(b'%PDF-1.4\nfirst')
+        (docs_dir / 'two.pdf').write_bytes(b'%PDF-1.4\nsecond')
+        with patch.object(app, 'GCS_BUCKET', ''), patch.object(app, 'LOCAL_DOCS_DIR', self.temp.name):
+            with self.client.session_transaction() as session:
+                session.clear(); session.update(user='amassmann', role='provider', patient='mia')
+            self.assertEqual(self.client.get('/api/clinical').json['medications'], [])
+            self.assertEqual(self.client.get('/api/clinical').json['deleted_entries'], {})
+            self.assertEqual([row['document'] for row in self.client.get('/api/clinical').json['documents']], ['one.pdf'])
+            with self.client.get('/documents/one.pdf') as response:
+                self.assertEqual(response.status_code, 200)
+            self.assertEqual(self.client.get('/documents/two.pdf').status_code, 404)
+            self.assertEqual(self.client.put('/api/provider-access/amassmann', json={'sections': sections, 'documents': ['two.pdf']}).status_code, 403)
+            with self.client.session_transaction() as session:
+                session.clear(); session['user'] = 'mia'
+            settings = self.client.get('/api/provider-access').json
+            self.assertEqual(settings['providers'][0]['username'], 'amassmann')
+            self.assertEqual({doc['filename'] for doc in settings['documents']}, {'one.pdf', 'two.pdf'})
+            updated = self.client.put('/api/provider-access/amassmann', json={'sections': sections, 'documents': ['two.pdf']})
+            self.assertEqual(updated.status_code, 200)
 
     def test_family_member_details_are_validated_and_account_scoped(self):
         url = '/api/preparation/family-members'

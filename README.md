@@ -82,8 +82,9 @@ python3 app.py
 The chart opens in **Provider** presentation view, with editing and PDF uploads hidden.
 A small **Exit presentation** button returns to **Prepare**, which shows the goal
 editor and upload controls. **Present to provider** starts the presentation at visit priorities. This is a presentation switch within the
-signed-in account, not a separate login or access restriction. The selected view is
-remembered per account for the current browser tab/session.
+owner's signed-in account. Named provider logins have a separate read-only role, are mapped to one patient account, and are kept in presentation mode. Provider permissions are enforced by the server for APIs and PDF downloads as well as by the page controls.
+
+Mia's **Provider access** section in Prepare controls which sections each provider can see and which individual PDFs are available in their Medical records section. A PDF must also be selected with **Include source in Provider view** in Prepare. Provider accounts are stored in the `provider_accounts` table with a password hash and a required first-login password change; per-provider visibility is stored in `provider_access`.
 
 Visit priorities are ordered and numbered. Each priority has space for what is
 being done, the goal, and the clinical direction requested. In Prepare, use the

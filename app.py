@@ -98,6 +98,22 @@ def init_db():
             updated_at TEXT DEFAULT (datetime('now'))
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS provider_accounts (
+            username TEXT PRIMARY KEY,
+            password_hash TEXT NOT NULL,
+            patient TEXT NOT NULL,
+            display_name TEXT NOT NULL,
+            must_change_password INTEGER NOT NULL DEFAULT 1
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS provider_access (
+            username TEXT PRIMARY KEY,
+            sections TEXT NOT NULL,
+            documents TEXT NOT NULL DEFAULT '[]'
+        )
+    """)
     conn.commit()
     vitals.init_schema(conn)
     genetics.init_schema(conn)
@@ -145,10 +161,81 @@ def require_login():
     return None
 
 
+VISIBLE_SECTIONS = ('goals', 'history', 'medications', 'labs', 'vitals', 'family', 'genetics', 'documents')
+
+
+def provider_account(username: str | None = None):
+    username = username or session.get('user', '')
+    if not username:
+        return None
+    return get_db().execute(
+        'SELECT username, password_hash, patient, display_name, must_change_password FROM provider_accounts WHERE username = ?',
+        (username,),
+    ).fetchone()
+
+
+def is_provider():
+    return bool(session.get('role') == 'provider')
+
+
+def data_user():
+    return session.get('patient') if is_provider() else session.get('user')
+
+
+def owner_only_json():
+    if is_provider():
+        return jsonify({'error': 'Provider accounts are read-only'}), 403
+    return None
+
+
+def get_provider_access(username: str):
+    row = get_db().execute('SELECT sections, documents FROM provider_access WHERE username = ?', (username,)).fetchone()
+    sections = {name: True for name in VISIBLE_SECTIONS}
+    documents = []
+    if row:
+        try:
+            sections.update({k: bool(v) for k, v in json.loads(row[0]).items() if k in VISIBLE_SECTIONS})
+            documents = json.loads(row[1])
+        except (TypeError, ValueError):
+            pass
+    return {'sections': sections, 'documents': documents if isinstance(documents, list) else []}
+
+
+def provider_can_see_document(filename: str, user: str | None = None):
+    if not is_provider():
+        return True
+    access = get_provider_access(session['user'])
+    if not access['sections'].get('documents', False) or filename not in access['documents']:
+        return False
+    prep = preparation.load(get_db(), data_user())
+    return bool(prep.get('source:' + filename, {}).get('included'))
+
+
+@app.before_request
+def enforce_provider_password_change():
+    if not is_provider() or request.endpoint in {'login', 'login_post', 'logout', 'change_password', 'change_password_post', 'static'}:
+        return None
+    account = provider_account()
+    if not account:
+        session.clear()
+        if request.path.startswith('/api/'):
+            return jsonify({'error': 'unauthorized'}), 401
+        return redirect(url_for('login'))
+    session['patient'] = account[2]
+    if account[4]:
+        if request.path.startswith('/api/'):
+            return jsonify({'error': 'Change your password before continuing'}), 403
+        return redirect(url_for('change_password'))
+    return None
+
+
 @app.context_processor
 def inject_context():
     user = session.get("user", "")
-    return {"logged_in": bool(user), "current_user": user}
+    account = provider_account(user) if user else None
+    patient = account[2] if account else user
+    return {"logged_in": bool(user), "current_user": patient, "provider_login": bool(account),
+            "provider_display_name": account[3] if account else ''}
 
 
 @app.get("/login")
@@ -162,6 +249,13 @@ def login():
 def login_post():
     username = request.form.get("username", "").lower().strip()
     password = request.form.get("password", "")
+    account = provider_account(username)
+    if account and check_password(password, account[1]):
+        session.clear()
+        session.update(user=username, role='provider', patient=account[2])
+        if account[4]:
+            return redirect(url_for('change_password'))
+        return redirect(url_for('dashboard'))
     stored_hash = USERS.get(username, "")
     if stored_hash and check_password(password, stored_hash):
         session.clear()
@@ -171,6 +265,36 @@ def login_post():
             next_path = url_for("dashboard")
         return redirect(next_path)
     return render_template("login.html", error="That login did not match. Check your username and password and try again."), 401
+
+
+@app.get('/change-password')
+def change_password():
+    if not is_provider():
+        return redirect(url_for('login'))
+    return render_template('change_password.html', error=None)
+
+
+@app.post('/change-password')
+def change_password_post():
+    if not is_provider():
+        return redirect(url_for('login'))
+    account = provider_account()
+    current = request.form.get('current_password', '')
+    new = request.form.get('new_password', '')
+    confirm = request.form.get('confirm_password', '')
+    if not account or not check_password(current, account[1]):
+        return render_template('change_password.html', error='Current password is incorrect.'), 400
+    if len(new) < 12:
+        return render_template('change_password.html', error='Choose a password with at least 12 characters.'), 400
+    if new == current:
+        return render_template('change_password.html', error='Choose a password different from the temporary password.'), 400
+    if new != confirm:
+        return render_template('change_password.html', error='The new passwords do not match.'), 400
+    conn = get_db()
+    conn.execute('UPDATE provider_accounts SET password_hash = ?, must_change_password = 0 WHERE username = ?',
+                 (hash_password(new), session['user']))
+    conn.commit()
+    return redirect(url_for('dashboard'))
 
 
 @app.post("/logout")
@@ -184,8 +308,30 @@ def dashboard():
     guard = require_login()
     if guard:
         return guard
-    user = session["user"]
-    return render_template("dashboard.html", records=load_records(user), docs=available_docs(user), preparation=preparation.load(get_db(), user))
+    user = data_user()
+    account = provider_account() if is_provider() else None
+    access = get_provider_access(session['user']) if is_provider() else {'sections': {key: True for key in VISIBLE_SECTIONS}, 'documents': []}
+    docs = available_docs(user)
+    records = load_records(user)
+    saved_preparation = preparation.load(get_db(), user)
+    if is_provider():
+        docs = [doc for doc in docs if doc['filename'] in access['documents'] and provider_can_see_document(doc['filename'])]
+        if not access['sections'].get('goals'):
+            records['goals'] = {'current_visit': {'date': '', 'items': [], 'questions': []}, 'visits': [], 'issues': []}
+        visible_prep = {}
+        for key, value in saved_preparation.items():
+            if key.startswith('section:') and access['sections'].get(key.split(':', 1)[1], False):
+                visible_prep[key] = value
+            elif key.startswith('family_member:') and access['sections'].get('family', False):
+                visible_prep[key] = value
+        for doc in docs:
+            key = 'source:' + doc['filename']
+            if saved_preparation.get(key, {}).get('included'):
+                visible_prep[key] = {'included': True}
+        saved_preparation = visible_prep
+    return render_template("dashboard.html", records=records, docs=docs,
+                           preparation=saved_preparation, visible_sections=access['sections'],
+                           provider_login=bool(account), provider_display_name=account[3] if account else '')
 
 
 @app.get("/api/records")
@@ -193,13 +339,21 @@ def records_api():
     guard = require_login()
     if guard:
         return jsonify({"error": "unauthorized"}), 401
-    return jsonify(load_records(session["user"]))
+    records = load_records(data_user())
+    if is_provider():
+        access = get_provider_access(session['user'])['sections']
+        if not access.get('goals'):
+            records['goals'] = {'current_visit': {'date': '', 'items': [], 'questions': []}, 'visits': [], 'issues': []}
+        records = {'goals': records['goals']}
+    return jsonify(records)
 
 
 @app.post("/api/goals")
 def goals_api():
     if not session.get("user"):
         return jsonify({"error": "unauthorized"}), 401
+    if (denied := owner_only_json()) is not None:
+        return denied
     # JSON only: a cross-site form can't send it, so this doubles as CSRF protection.
     body = request.get_json(silent=True) if request.is_json else None
     if not isinstance(body, dict):
@@ -261,9 +415,9 @@ def goals_api():
             goals["issues"].append({"title": issue["title"].strip(), "detail": issue["detail"].strip()})
     except ValueError as error:
         return jsonify({"error": str(error)}), 400
-    records = load_records(session["user"])
+    records = load_records(data_user())
     records["goals"] = goals
-    save_records(session["user"], records)
+    save_records(data_user(), records)
     return jsonify(goals)
 
 
@@ -271,7 +425,9 @@ def goals_api():
 def vitals_api():
     if not session.get("user"):
         return jsonify({"error": "unauthorized"}), 401
-    conn, user = get_db(), session['user']
+    conn, user = get_db(), data_user()
+    if is_provider() and not get_provider_access(session['user'])['sections'].get('vitals', False):
+        return jsonify({'metrics': {}, 'series': {}, 'cycles': [], 'deleted_entries': {}})
     updates = preparation.load(conn, user)
     data = vitals.load_vitals(conn, user)
     data['deleted_entries'] = {}
@@ -292,6 +448,8 @@ def vitals_api():
                 continue
             data['series'].setdefault(row['metric'], []).append({'t': row['taken_at'], 'v': value, 'source': row.get('source'), 'doc': row.get('doc'), 'page': row.get('page'), 'note': row.get('note'), 'seq': row.get('seq'), '_key': row['_key'], '_original': row.get('_original'), '_patient_note': row.get('_patient_note'), '_patient_updated': row.get('_patient_updated')})
     data['cycles'] = [{**r, 'start': r['start'], 'end': r['end']} for r in data.pop('visible_cycles')]
+    if is_provider():
+        data['deleted_entries'] = {}
     return jsonify(data)
 
 
@@ -300,12 +458,31 @@ def clinical_api():
     if not session.get("user"):
         return jsonify({"error": "unauthorized"}), 401
     conn = get_db()
-    user = session['user']
+    user = data_user()
     updates = preparation.load(conn, user)
     source_data = clinical_records_for_person(conn, user)
     data = preparation.apply(source_data, updates)
+    if is_provider():
+        access = get_provider_access(session['user'])
+        sections = access['sections']
+        if not sections.get('history'):
+            data['diagnoses'], data['allergies'], data['events'] = [], [], []
+        if not sections.get('medications'):
+            data['medications'] = []
+        if not sections.get('labs'):
+            data['lab_results'] = []
+        if not sections.get('family'):
+            data['family_history'] = []
+        if not sections.get('genetics'):
+            data['clinical_genetics'] = []
+        selected = set(access['documents']) if sections.get('documents') else set()
+        data['documents'] = [doc for doc in data['documents'] if doc['document'] in selected and provider_can_see_document(doc['document'])]
+        if not sections.get('documents'):
+            data['documents'] = []
     for table, rows in preparation.vital_rows(vitals.load_vitals(conn, user)).items():
         _, data['deleted_entries'][table] = preparation.apply_table(table, rows, updates)
+    if is_provider():
+        data['deleted_entries'] = {}
     return jsonify(data)
 
 
@@ -325,13 +502,17 @@ def clinical_records_for_person(conn, user):
 def preparation_api():
     if not session.get('user'):
         return jsonify({'error': 'unauthorized'}), 401
-    return jsonify(preparation.load(get_db(), session['user']))
+    if is_provider():
+        return jsonify({})
+    return jsonify(preparation.load(get_db(), data_user()))
 
 
 @app.put('/api/preparation/sources')
 def preparation_source():
     if not session.get('user'):
         return jsonify({'error': 'unauthorized'}), 401
+    if (denied := owner_only_json()) is not None:
+        return denied
     body = request.get_json(silent=True) if request.is_json else None
     if not isinstance(body, dict) or set(body) != {'document', 'included'}:
         return jsonify({'error': 'Provide a document filename and inclusion flag'}), 400
@@ -342,7 +523,7 @@ def preparation_source():
     if type(body['included']) is not bool:
         return jsonify({'error': 'The inclusion flag must be true or false'}), 400
     update = {'included': body['included']}
-    preparation.save(get_db(), session['user'], 'source:' + filename, update)
+    preparation.save(get_db(), data_user(), 'source:' + filename, update)
     return jsonify({'document': filename, **update})
 
 
@@ -350,6 +531,8 @@ def preparation_source():
 def preparation_family_member():
     if not session.get('user'):
         return jsonify({'error': 'unauthorized'}), 401
+    if (denied := owner_only_json()) is not None:
+        return denied
     body = request.get_json(silent=True) if request.is_json else None
     if not isinstance(body, dict) or set(body) != {'relation', 'fields'}:
         return jsonify({'error': 'Provide a family member and their details'}), 400
@@ -374,7 +557,7 @@ def preparation_family_member():
     slug = ''.join(c.lower() if c.isalnum() else '_' for c in relation.strip()).strip('_')
     slug = '_'.join(part for part in slug.split('_') if part)
     details = {'dob': dob, 'deceased': fields.get('deceased', False), 'date_of_death': death_date}
-    preparation.save(get_db(), session['user'], 'family_member:' + slug, details)
+    preparation.save(get_db(), data_user(), 'family_member:' + slug, details)
     return jsonify({'relation': relation.strip(), **details})
 
 
@@ -382,13 +565,15 @@ def preparation_family_member():
 def preparation_section(section):
     if not session.get('user'):
         return jsonify({'error': 'unauthorized'}), 401
+    if (denied := owner_only_json()) is not None:
+        return denied
     body = request.get_json(silent=True) if request.is_json else None
     if section not in preparation.SECTIONS or not isinstance(body, dict) or set(body) != {'summary', 'notes'}:
         return jsonify({'error': 'Provide a summary and notes for a supported section'}), 400
     if any(not isinstance(v, str) or len(v) > 10000 for v in body.values()):
         return jsonify({'error': 'Summary and notes must be text up to 10,000 characters each'}), 400
     update = {k: v.strip() for k, v in body.items()}
-    preparation.save(get_db(), session['user'], 'section:' + section, update)
+    preparation.save(get_db(), data_user(), 'section:' + section, update)
     return jsonify(update)
 
 
@@ -397,7 +582,9 @@ def preparation_section(section):
 def preparation_entry(table, key=None):
     if not session.get('user'):
         return jsonify({'error': 'unauthorized'}), 401
-    conn, user = get_db(), session['user']
+    if (denied := owner_only_json()) is not None:
+        return denied
+    conn, user = get_db(), data_user()
     if table not in preparation.FIELDS:
         return jsonify({'error': 'Unknown record type'}), 404
     updates = preparation.load(conn, user)
@@ -451,7 +638,9 @@ def preparation_entry(table, key=None):
 def genetics_api():
     if not session.get("user"):
         return jsonify({"error": "unauthorized"}), 401
-    conn, user = get_db(), session['user']
+    conn, user = get_db(), data_user()
+    if is_provider() and not get_provider_access(session['user'])['sections'].get('genetics', False):
+        return jsonify({'findings': [], 'sources': [], 'deleted_entries': []})
     data = genetics.load_genetics(conn, user)
     updates = preparation.load(conn, user)
     data['findings'], data['deleted_entries'] = preparation.apply_table('genetic_findings', data['findings'], updates)
@@ -463,7 +652,58 @@ def genetics_api():
         if key.startswith('genetic_findings:manual:'):
             row = {**update['fields'], '_key': key, '_manual': True, '_patient_note': update['notes']}
             (data['deleted_entries'] if update.get('deleted') else data['findings']).append(row)
+    if is_provider():
+        data['deleted_entries'] = []
     return jsonify(data)
+
+
+@app.get('/api/provider-access')
+def provider_access_api():
+    if not session.get('user'):
+        return jsonify({'error': 'unauthorized'}), 401
+    if is_provider() or data_user() != 'mia':
+        return jsonify({'error': 'Only Mia can manage provider access'}), 403
+    conn = get_db()
+    rows = conn.execute('SELECT username, display_name FROM provider_accounts WHERE patient = ? ORDER BY display_name', ('mia',)).fetchall()
+    docs = available_docs('mia')
+    prep = preparation.load(conn, 'mia')
+    return jsonify({'providers': [
+        {'username': row[0], 'display_name': row[1], **get_provider_access(row[0])}
+        for row in rows
+    ], 'documents': [
+        {'filename': doc['filename'], 'name': doc['name'], 'included_in_presentation': bool(prep.get('source:' + doc['filename'], {}).get('included'))}
+        for doc in docs
+    ], 'sections': list(VISIBLE_SECTIONS)})
+
+
+@app.put('/api/provider-access/<username>')
+def update_provider_access_api(username):
+    if not session.get('user'):
+        return jsonify({'error': 'unauthorized'}), 401
+    if is_provider() or data_user() != 'mia':
+        return jsonify({'error': 'Only Mia can manage provider access'}), 403
+    body = request.get_json(silent=True) if request.is_json else None
+    if not isinstance(body, dict) or set(body) != {'sections', 'documents'}:
+        return jsonify({'error': 'Provide section and medical record access'}), 400
+    sections, documents = body['sections'], body['documents']
+    if not isinstance(sections, dict) or set(sections) - set(VISIBLE_SECTIONS) or any(type(value) is not bool for value in sections.values()):
+        return jsonify({'error': 'Section settings must be checkboxes'}), 400
+    if not isinstance(documents, list) or len(documents) > 500 or not all(isinstance(value, str) and Path(value).name == value for value in documents):
+        return jsonify({'error': 'Choose valid medical record files'}), 400
+    conn = get_db()
+    account = conn.execute('SELECT patient FROM provider_accounts WHERE username = ?', (username,)).fetchone()
+    if not account or account[0] != 'mia':
+        return jsonify({'error': 'Provider account not found'}), 404
+    available = {doc['filename'] for doc in available_docs('mia')}
+    if not set(documents) <= available:
+        return jsonify({'error': 'A selected medical record is no longer available'}), 400
+    current = {name: False for name in VISIBLE_SECTIONS}
+    current.update(sections)
+    conn.execute('''INSERT INTO provider_access (username, sections, documents) VALUES (?, ?, ?)
+                    ON CONFLICT(username) DO UPDATE SET sections = excluded.sections, documents = excluded.documents''',
+                 (username, json.dumps(current), json.dumps(sorted(set(documents)))))
+    conn.commit()
+    return jsonify({'username': username, 'sections': current, 'documents': sorted(set(documents))})
 
 
 def get_bucket():
@@ -505,10 +745,13 @@ def document(filename):
     safe_name = secure_filename(filename)
     if not safe_name.lower().endswith(".pdf"):
         abort(404)
+    user = data_user()
+    if is_provider() and not provider_can_see_document(safe_name):
+        abort(404)
     if not GCS_BUCKET and LOCAL_DOCS_DIR:
-        return send_from_directory(Path(LOCAL_DOCS_DIR) / session["user"], safe_name, mimetype="application/pdf")
+        return send_from_directory(Path(LOCAL_DOCS_DIR) / user, safe_name, mimetype="application/pdf")
     bucket = get_bucket()
-    blob = bucket.blob(docs_prefix(session["user"]) + safe_name)
+    blob = bucket.blob(docs_prefix(user) + safe_name)
     if not blob.exists():
         abort(404)
     return Response(blob.download_as_bytes(), mimetype="application/pdf",
@@ -520,6 +763,8 @@ def upload_document():
     guard = require_login()
     if guard:
         return guard
+    if is_provider():
+        abort(403)
     uploaded = request.files.get("file")
     if not uploaded or not uploaded.filename:
         return redirect(url_for("dashboard"))
@@ -527,7 +772,7 @@ def upload_document():
     if not filename.lower().endswith(".pdf"):
         abort(415)
     bucket = get_bucket()
-    blob = bucket.blob(docs_prefix(session["user"]) + filename)
+    blob = bucket.blob(docs_prefix(data_user()) + filename)
     blob.upload_from_file(uploaded.stream, content_type="application/pdf")
     return redirect(url_for("dashboard") + "#documents")
 

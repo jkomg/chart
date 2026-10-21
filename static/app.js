@@ -11,7 +11,7 @@ chart.lastTab = 'goals';
 function activate(name, { scroll = true } = {}) {
   const tab = document.querySelector(`.nav-item[data-tab="${name}"]`);
   const panel = document.getElementById(name);
-  if (!tab || !panel) return false;
+  if (!tab || !panel || tab.hidden || panel.hidden) return false;
   tabs.forEach(item => item.classList.toggle('active', item === tab));
   panels.forEach(item => item.classList.toggle('active', item === panel));
   const label = [...tab.childNodes].filter(n => n.nodeType === Node.TEXT_NODE).map(n => n.textContent).join('').trim();
@@ -33,7 +33,10 @@ function route() {
   document.dispatchEvent(new CustomEvent('chart:doc', { detail: null }));
   const [name, query] = hash.split('?');
   chart.query = new URLSearchParams(query || '');
-  if (name !== chart.lastTab || !document.querySelector('.tab-panel.active')) activate(name || 'goals') || activate('goals');
+  if (name !== chart.lastTab || !document.querySelector('.tab-panel.active:not([hidden])')) {
+    const first = tabs.find(tab => !tab.hidden)?.dataset.tab;
+    activate(name || 'goals') || activate(first || 'goals');
+  }
 }
 
 chart.go = hash => { if (location.hash.slice(1) !== hash) location.hash = hash; };
@@ -61,6 +64,7 @@ document.querySelectorAll('[data-toast]').forEach(button => button.addEventListe
 // A presentation mode on the signed-in account, not a separate provider login.
 chart.mode = 'provider';
 chart.setMode = (mode, navigate = false) => {
+  if (document.body.dataset.role === 'provider') mode = 'provider';
   if (mode === 'provider' && chart.hasUnsavedPreparation?.()) {
     if (!confirm('Discard unsaved edits and switch to Provider view?')) return;
     document.dispatchEvent(new CustomEvent('chart:discardPreparation'));
@@ -73,4 +77,5 @@ chart.setMode = (mode, navigate = false) => {
   if (navigate && chart.mode === 'provider') chart.go('goals');
 };
 document.querySelectorAll('.mode-action').forEach(button => button.addEventListener('click', () => chart.setMode(button.dataset.mode, true)));
-try { chart.setMode(sessionStorage.getItem(`chart-mode:${document.body.dataset.account}`)); } catch { chart.setMode('provider'); }
+if (document.body.dataset.role === 'provider') chart.setMode('provider');
+else try { chart.setMode(sessionStorage.getItem(`chart-mode:${document.body.dataset.account}`)); } catch { chart.setMode('provider'); }

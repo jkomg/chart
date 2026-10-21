@@ -14,7 +14,7 @@
     <form method="post" class="login-form" autocomplete="on">
       <label>Username<input name="username" autocomplete="username" required autofocus></label>
       <label>Password<input name="password" type="password" autocomplete="current-password" required></label>
-      {% if error %}<p class="form-error">{{ error }}</p>{% endif %}
+      {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
       <button class="primary-button" type="submit">Open our chart <span>→</span></button>
     </form>
     <p class="security-note"><span class="lock-dot">●</span> Private by default · visible only to your account</p>
