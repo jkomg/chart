@@ -323,8 +323,7 @@ def dashboard():
                 visible_prep[key] = value
         for doc in docs:
             key = 'source:' + doc['filename']
-            if saved_preparation.get(key, {}).get('included'):
-                visible_prep[key] = {'included': True}
+            visible_prep[key] = {'included': True}
         saved_preparation = visible_prep
     return render_template("dashboard.html", records=records, docs=docs,
                            preparation=saved_preparation, visible_sections=access['sections'],
