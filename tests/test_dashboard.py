@@ -153,6 +153,42 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(row[4], 0)
         self.assertTrue(app.check_password('DrMassmann-New-Password-2026', row[1]))
 
+    def test_provider_signins_are_logged_and_admin_is_separate_from_patient_data(self):
+        conn = app.get_db()
+        conn.execute('INSERT INTO provider_accounts (username, password_hash, patient, display_name, must_change_password) VALUES (?, ?, ?, ?, ?)',
+                     ('amassmann', app.hash_password('Provider-Temp-123!'), 'mia', 'Dr. Massmann', 0))
+        conn.execute('INSERT INTO admin_accounts (username, password_hash, display_name, must_change_password) VALUES (?, ?, ?, ?)',
+                     ('admin', app.hash_password('Admin-Temp-123!'), 'System admin', 1))
+        conn.commit()
+
+        success = self.client.post('/login', data={'username': 'amassmann', 'password': 'Provider-Temp-123!'})
+        self.assertEqual(success.status_code, 302)
+        self.client.post('/logout')
+        failure = self.client.post('/login', data={'username': 'amassmann', 'password': 'wrong-password'})
+        self.assertEqual(failure.status_code, 401)
+
+        admin_login = self.client.post('/login', data={'username': 'admin', 'password': 'Admin-Temp-123!'})
+        self.assertEqual(admin_login.headers['Location'], '/change-password')
+        self.assertEqual(self.client.get('/api/records').status_code, 403)
+        changed = self.client.post('/change-password', data={
+            'current_password': 'Admin-Temp-123!', 'new_password': 'Admin-Private-Password-2026',
+            'confirm_password': 'Admin-Private-Password-2026'
+        })
+        self.assertEqual(changed.headers['Location'], '/admin')
+        page = self.client.get('/admin').get_data(as_text=True)
+        self.assertIn('Successful provider sign-ins', page)
+        self.assertIn('Failed sign-in attempts', page)
+        self.assertIn('Dr. Massmann', page)
+        events = conn.execute("SELECT actor_role, outcome FROM audit_events WHERE username='amassmann' ORDER BY id").fetchall()
+        self.assertEqual(events, [('provider', 'success'), ('provider', 'failure')])
+
+    def test_unhandled_application_errors_are_recorded_without_error_messages(self):
+        with app.app.test_request_context('/__test-error'):
+            response = app.log_unhandled_error(ZeroDivisionError('sensitive details'))
+        self.assertEqual(response[1], 500)
+        event = app.get_db().execute("SELECT event_type, endpoint, detail FROM audit_events ORDER BY id DESC LIMIT 1").fetchone()
+        self.assertEqual(event, ('server_error', 'unmatched', 'ZeroDivisionError'))
+
     def test_provider_permissions_filter_sections_and_individual_documents(self):
         conn = app.get_db()
         conn.execute('INSERT INTO provider_accounts (username, password_hash, patient, display_name, must_change_password) VALUES (?, ?, ?, ?, ?)',

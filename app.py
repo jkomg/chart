@@ -11,6 +11,7 @@ from pathlib import Path
 import libsql
 from flask import Flask, Response, abort, jsonify, redirect, render_template, request, send_from_directory, session, url_for
 from google.cloud import storage as gcs
+from werkzeug.exceptions import HTTPException
 from werkzeug.utils import secure_filename
 
 import clinical
@@ -114,6 +115,27 @@ def init_db():
             documents TEXT NOT NULL DEFAULT '[]'
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS admin_accounts (
+            username TEXT PRIMARY KEY,
+            password_hash TEXT NOT NULL,
+            display_name TEXT NOT NULL,
+            must_change_password INTEGER NOT NULL DEFAULT 1
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS audit_events (
+            id INTEGER PRIMARY KEY,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            username TEXT NOT NULL DEFAULT '',
+            actor_role TEXT NOT NULL,
+            event_type TEXT NOT NULL,
+            outcome TEXT NOT NULL,
+            endpoint TEXT NOT NULL DEFAULT '',
+            detail TEXT NOT NULL DEFAULT ''
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS audit_events_recent ON audit_events (created_at, event_type, actor_role)")
     conn.commit()
     vitals.init_schema(conn)
     genetics.init_schema(conn)
@@ -175,6 +197,30 @@ def provider_account(username: str | None = None):
     ).fetchone()
 
 
+def admin_account(username: str | None = None):
+    username = username or session.get('user', '')
+    if not username:
+        return None
+    return get_db().execute(
+        'SELECT username, password_hash, display_name, must_change_password FROM admin_accounts WHERE username = ?',
+        (username,),
+    ).fetchone()
+
+
+def record_audit_event(username: str, actor_role: str, event_type: str, outcome: str,
+                       endpoint: str = '', detail: str = ''):
+    """Persist minimal operational events without passwords, request bodies, or patient details."""
+    try:
+        conn = get_db()
+        conn.execute(
+            'INSERT INTO audit_events (username, actor_role, event_type, outcome, endpoint, detail) VALUES (?, ?, ?, ?, ?, ?)',
+            (username[:80], actor_role[:20], event_type[:40], outcome[:20], endpoint[:120], detail[:120]),
+        )
+        conn.commit()
+    except Exception as error:
+        app.logger.error('Could not write operational audit event (%s)', type(error).__name__)
+
+
 def is_provider():
     return bool(session.get('role') == 'provider')
 
@@ -229,6 +275,45 @@ def enforce_provider_password_change():
     return None
 
 
+@app.before_request
+def enforce_admin_access():
+    if session.get('role') != 'admin':
+        return None
+    if request.endpoint in {'login', 'login_post', 'logout', 'change_password', 'change_password_post', 'admin_dashboard', 'static'}:
+        account = admin_account()
+        if not account:
+            session.clear()
+            return redirect(url_for('login'))
+        if account[3] and request.endpoint not in {'change_password', 'change_password_post', 'logout', 'static'}:
+            return redirect(url_for('change_password'))
+        return None
+    account = admin_account()
+    if not account:
+        session.clear()
+        if request.path.startswith('/api/'):
+            return jsonify({'error': 'unauthorized'}), 401
+        return redirect(url_for('login'))
+    if account[3]:
+        if request.path.startswith('/api/'):
+            return jsonify({'error': 'Change your password before continuing'}), 403
+        return redirect(url_for('change_password'))
+    if request.path.startswith('/api/'):
+        return jsonify({'error': 'Admin accounts cannot access patient data'}), 403
+    return redirect(url_for('admin_dashboard'))
+
+
+@app.errorhandler(Exception)
+def log_unhandled_error(error):
+    if isinstance(error, HTTPException):
+        return error
+    endpoint = request.endpoint or 'unmatched'
+    error_type = type(error).__name__
+    record_audit_event(session.get('user', ''), session.get('role', 'unknown'),
+                       'server_error', 'error', endpoint, error_type)
+    app.logger.error('Unhandled application error at endpoint %s (%s)', endpoint, error_type)
+    return render_template('error.html'), 500
+
+
 @app.context_processor
 def inject_context():
     user = session.get("user", "")
@@ -251,56 +336,108 @@ def login_post():
     password = request.form.get("password", "")
     account = provider_account(username)
     if account and check_password(password, account[1]):
+        record_audit_event(username, 'provider', 'login', 'success', 'login_post')
         session.clear()
         session.update(user=username, role='provider', patient=account[2])
         if account[4]:
             return redirect(url_for('change_password'))
         return redirect(url_for('dashboard'))
+    admin = admin_account(username)
+    if admin and check_password(password, admin[1]):
+        record_audit_event(username, 'admin', 'login', 'success', 'login_post')
+        session.clear()
+        session.update(user=username, role='admin')
+        if admin[3]:
+            return redirect(url_for('change_password'))
+        return redirect(url_for('admin_dashboard'))
     stored_hash = USERS.get(username, "")
     if stored_hash and check_password(password, stored_hash):
+        record_audit_event(username, 'owner', 'login', 'success', 'login_post')
         session.clear()
         session["user"] = username
         next_path = request.args.get("next", "")
         if not next_path.startswith("/") or next_path.startswith("//"):
             next_path = url_for("dashboard")
         return redirect(next_path)
+    attempted_role = 'provider' if account else 'admin' if admin else 'owner' if stored_hash else 'unknown'
+    record_audit_event(username, attempted_role, 'login', 'failure', 'login_post')
     return render_template("login.html", error="That login did not match. Check your username and password and try again."), 401
 
 
 @app.get('/change-password')
 def change_password():
-    if not is_provider():
+    if not is_provider() and session.get('role') != 'admin':
         return redirect(url_for('login'))
-    return render_template('change_password.html', error=None)
+    return render_template('change_password.html', error=None,
+                           account_kind='provider' if is_provider() else 'admin')
 
 
 @app.post('/change-password')
 def change_password_post():
-    if not is_provider():
+    if not is_provider() and session.get('role') != 'admin':
         return redirect(url_for('login'))
-    account = provider_account()
+    account = provider_account() if is_provider() else admin_account()
     current = request.form.get('current_password', '')
     new = request.form.get('new_password', '')
     confirm = request.form.get('confirm_password', '')
     if not account or not check_password(current, account[1]):
-        return render_template('change_password.html', error='Current password is incorrect.'), 400
+        return render_template('change_password.html', error='Current password is incorrect.',
+                               account_kind='provider' if is_provider() else 'admin'), 400
     if len(new) < 12:
-        return render_template('change_password.html', error='Choose a password with at least 12 characters.'), 400
+        return render_template('change_password.html', error='Choose a password with at least 12 characters.',
+                               account_kind='provider' if is_provider() else 'admin'), 400
     if new == current:
-        return render_template('change_password.html', error='Choose a password different from the temporary password.'), 400
+        return render_template('change_password.html', error='Choose a password different from the temporary password.',
+                               account_kind='provider' if is_provider() else 'admin'), 400
     if new != confirm:
-        return render_template('change_password.html', error='The new passwords do not match.'), 400
+        return render_template('change_password.html', error='The new passwords do not match.',
+                               account_kind='provider' if is_provider() else 'admin'), 400
     conn = get_db()
-    conn.execute('UPDATE provider_accounts SET password_hash = ?, must_change_password = 0 WHERE username = ?',
+    table = 'provider_accounts' if is_provider() else 'admin_accounts'
+    conn.execute(f'UPDATE {table} SET password_hash = ?, must_change_password = 0 WHERE username = ?',
                  (hash_password(new), session['user']))
     conn.commit()
-    return redirect(url_for('dashboard'))
+    return redirect(url_for('dashboard' if is_provider() else 'admin_dashboard'))
 
 
 @app.post("/logout")
 def logout():
     session.clear()
     return redirect(url_for("login"))
+
+
+@app.get('/admin')
+def admin_dashboard():
+    if not session.get('user') or session.get('role') != 'admin':
+        return redirect(url_for('login'))
+    conn = get_db()
+    metrics = conn.execute("""
+        SELECT
+          SUM(CASE WHEN event_type = 'login' AND actor_role = 'provider' AND outcome = 'success' THEN 1 ELSE 0 END),
+          SUM(CASE WHEN event_type = 'login' AND outcome = 'failure' THEN 1 ELSE 0 END),
+          SUM(CASE WHEN event_type = 'server_error' THEN 1 ELSE 0 END)
+        FROM audit_events WHERE created_at >= datetime('now', '-30 days')
+    """).fetchone()
+    providers = conn.execute("""
+        SELECT p.username, p.display_name,
+          SUM(CASE WHEN e.event_type = 'login' AND e.outcome = 'success'
+                   AND e.created_at >= datetime('now', '-30 days') THEN 1 ELSE 0 END),
+          MAX(CASE WHEN e.event_type = 'login' AND e.outcome = 'success' THEN e.created_at END)
+        FROM provider_accounts p LEFT JOIN audit_events e ON e.username = p.username AND e.actor_role = 'provider'
+        GROUP BY p.username, p.display_name ORDER BY p.display_name
+    """).fetchall()
+    activity = conn.execute("""
+        SELECT created_at, username, actor_role, outcome FROM audit_events
+        WHERE event_type = 'login' AND actor_role IN ('provider', 'owner', 'admin')
+        ORDER BY id DESC LIMIT 100
+    """).fetchall()
+    errors = conn.execute("""
+        SELECT created_at, endpoint, detail FROM audit_events
+        WHERE event_type = 'server_error' ORDER BY id DESC LIMIT 100
+    """).fetchall()
+    return render_template('admin.html', metrics=tuple(int(v or 0) for v in metrics),
+                           providers=providers, activity=activity, errors=errors,
+                           admin_name=admin_account()[2])
 
 
 @app.get("/")

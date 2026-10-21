@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chart — system activity</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+  <style>
+    .admin-shell{min-height:100vh;background:var(--paper)}
+    .admin-topbar{height:72px;display:flex;align-items:center;justify-content:space-between;padding:0 max(5vw,24px);border-bottom:1px solid var(--line);background:#fff}
+    .admin-brand{display:flex;align-items:center;gap:12px;color:var(--ink);font-size:17px;font-weight:700}
+    .admin-brand .brand-mark{width:34px;height:34px}
+    .admin-main{max-width:1180px;margin:0 auto;padding:44px 28px 80px}
+    .admin-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:24px 0}
+    .admin-stat{background:#fff;border:1px solid var(--line);border-radius:12px;padding:18px 20px}
+    .admin-stat span{display:block;color:var(--muted);font-size:12px}
+    .admin-stat strong{display:block;margin-top:8px;color:var(--ink);font-size:30px;font-weight:600}
+    .admin-panel{margin:18px 0;padding:22px;background:#fff;border:1px solid var(--line);border-radius:14px;overflow:auto}
+    .admin-panel h2{margin:0 0 16px;font-size:19px;font-weight:500;color:var(--ink)}
+    .admin-table{width:100%;border-collapse:collapse;text-align:left;font-size:13px}
+    .admin-table th,.admin-table td{padding:11px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+    .admin-table th{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600}
+    .admin-table td{color:var(--ink)}
+    .admin-empty{padding:12px;color:var(--muted);font-size:13px}
+    .admin-note{font-size:12px;color:var(--muted);margin-top:20px}
+    @media(max-width:680px){.admin-metrics{grid-template-columns:1fr}.admin-main{padding:30px 16px}.admin-table{min-width:530px}}
+  </style>
+</head>
+<body>
+  <div class="admin-shell">
+    <header class="admin-topbar">
+      <div class="admin-brand"><span class="brand-mark small">✦</span><span>chart · system activity</span></div>
+      <form method="post" action="{{ url_for('logout') }}"><button class="logout-button" type="submit">Sign out <span>↗</span></button></form>
+    </header>
+    <main class="admin-main">
+      <div class="page-heading"><div><p class="eyebrow">ADMINISTRATOR · {{ admin_name }}</p><h1>Usage and activity</h1><p class="subtitle">Provider sign-ins and application errors from the last 30 days.</p></div></div>
+      <section class="admin-metrics" aria-label="Last 30 days">
+        <article class="admin-stat"><span>Successful provider sign-ins</span><strong>{{ metrics[0] }}</strong></article>
+        <article class="admin-stat"><span>Failed sign-in attempts</span><strong>{{ metrics[1] }}</strong></article>
+        <article class="admin-stat"><span>Application errors</span><strong>{{ metrics[2] }}</strong></article>
+      </section>
+      <section class="admin-panel">
+        <h2>Provider accounts</h2>
+        {% if providers %}<table class="admin-table"><thead><tr><th>Account</th><th>Name</th><th>Successful sign-ins · 30 days</th><th>Last successful sign-in</th></tr></thead><tbody>
+        {% for username, display_name, login_count, last_login in providers %}<tr><td>{{ username }}</td><td>{{ display_name }}</td><td>{{ login_count or 0 }}</td><td>{{ last_login or 'No successful sign-in recorded' }}</td></tr>{% endfor %}
+        </tbody></table>{% else %}<p class="admin-empty">No provider accounts have been created.</p>{% endif %}
+      </section>
+      <section class="admin-panel">
+        <h2>Recent sign-ins</h2>
+        {% if activity %}<table class="admin-table"><thead><tr><th>Time (UTC)</th><th>Username</th><th>Role</th><th>Result</th></tr></thead><tbody>
+        {% for created_at, username, role, outcome in activity %}<tr><td>{{ created_at }}</td><td>{{ username }}</td><td>{{ role|capitalize }}</td><td>{{ outcome|capitalize }}</td></tr>{% endfor %}
+        </tbody></table>{% else %}<p class="admin-empty">No sign-in activity has been recorded yet.</p>{% endif %}
+      </section>
+      <section class="admin-panel">
+        <h2>Recent application errors</h2>
+        {% if errors %}<table class="admin-table"><thead><tr><th>Time (UTC)</th><th>Application route</th><th>Error type</th></tr></thead><tbody>
+        {% for created_at, endpoint, detail in errors %}<tr><td>{{ created_at }}</td><td>{{ endpoint }}</td><td>{{ detail }}</td></tr>{% endfor %}
+        </tbody></table>{% else %}<p class="admin-empty">No application errors have been recorded.</p>{% endif %}
+      </section>
+      <p class="admin-note">Activity records contain account names, timestamps, route names, and error types. Passwords and patient record contents are not included.</p>
+    </main>
+  </div>
+</body>
+</html>
