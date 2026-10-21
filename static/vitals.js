@@ -62,7 +62,7 @@
         chart.preparation.renderDeleted(state.data);
       } catch {
         body.classList.remove('refreshing');
-        chart.toast('Couldn’t load vitals. Check the connection and try again.');
+        chart.toast('Couldn’t load biometric data. Check the connection and try again.');
         return;
       }
     }
@@ -92,7 +92,7 @@
     }
     if (!cards.length) {
       body.append(el('div', { class: 'empty-card' }, el('div', { class: 'empty-icon' }, '♡'),
-        el('h2', {}, 'No vitals yet.'),
+        el('h2', {}, 'No biometric data yet.'),
         el('p', {}, 'Readings appear here once Apple Health, Oura, or clinic records are imported.')));
       return;
     }

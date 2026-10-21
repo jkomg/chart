@@ -133,6 +133,7 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.headers['Location'], '/change-password')
         self.assertEqual(self.client.get('/').headers['Location'], '/change-password')
+        self.assertIn('for your provider account', self.client.get('/change-password').get_data(as_text=True))
         self.assertEqual(self.client.get('/api/records').status_code, 403)
         self.assertEqual(self.client.post('/change-password', data={
             'current_password': 'Password1!', 'new_password': 'Password1!', 'confirm_password': 'Password1!'
@@ -182,6 +183,9 @@ class DashboardTests(unittest.TestCase):
             page = self.client.get('/').get_data(as_text=True)
             self.assertIn('data-tab="timeline"', page)
             self.assertIn('Integrated medical timeline', page)
+            self.assertIn('>Biometric Data</button>', page)
+            self.assertLess(page.index('data-tab="history"'), page.index('data-tab="timeline"'))
+            self.assertGreater(page.index('data-tab="medications"'), page.index('data-tab="documents"'))
             self.assertIn('source:' + app.TIMELINE_DOCUMENT, page)
             self.assertNotIn(app.TIMELINE_DOCUMENT, [doc['filename'] for doc in app.available_docs('mia')])
             self.assertEqual(self.client.get('/documents/' + app.TIMELINE_DOCUMENT).status_code, 200)

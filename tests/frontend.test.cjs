@@ -29,9 +29,9 @@ function environment(data = {}) {
         return { ok: true, json: async () => payload };
       }
       if (url === '/api/provider-access') return { ok: true, json: async () => ({
-        providers: [{ username: 'amassmann', display_name: 'Dr. Massmann', sections: Object.fromEntries(['goals', 'timeline', 'history', 'medications', 'labs', 'vitals', 'family', 'genetics', 'documents'].map(key => [key, true])), documents: [] }],
+        providers: [{ username: 'amassmann', display_name: 'Dr. Massmann', sections: Object.fromEntries(['goals', 'history', 'timeline', 'labs', 'vitals', 'family', 'genetics', 'documents', 'medications'].map(key => [key, true])), documents: [] }],
         documents: [{ filename: 'report.pdf', name: 'Report', included_in_presentation: false }],
-        sections: ['goals', 'timeline', 'history', 'medications', 'labs', 'vitals', 'family', 'genetics', 'documents']
+        sections: ['goals', 'history', 'timeline', 'labs', 'vitals', 'family', 'genetics', 'documents', 'medications']
       }) };
       if (url.startsWith('/api/provider-access/') && options.method === 'PUT') {
         requests.push({ url, payload: JSON.parse(options.body) });

@@ -2,8 +2,8 @@
   const host = document.querySelector('.provider-settings-body');
   if (!host) return;
   const labels = {
-    goals: 'Issues and visit priorities', timeline: 'Timeline', history: 'Medical history', medications: 'Medications', labs: 'Labs',
-    vitals: 'Vitals', family: 'Family history', genetics: 'Genetics', documents: 'Medical records'
+    goals: 'Issues and visit priorities', history: 'Medical history', timeline: 'Timeline', labs: 'Labs',
+    vitals: 'Biometric Data', family: 'Family history', genetics: 'Genetics', documents: 'Medical records', medications: 'Medications'
   };
   const el = (tag, attrs = {}, ...kids) => {
     const node = document.createElement(tag);

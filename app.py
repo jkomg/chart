@@ -161,7 +161,7 @@ def require_login():
     return None
 
 
-VISIBLE_SECTIONS = ('goals', 'timeline', 'history', 'medications', 'labs', 'vitals', 'family', 'genetics', 'documents')
+VISIBLE_SECTIONS = ('goals', 'history', 'timeline', 'labs', 'vitals', 'family', 'genetics', 'documents', 'medications')
 TIMELINE_DOCUMENT = 'Oct_2026_Integrated_Medical_Timeline_UPDATED.pdf'
 
 
