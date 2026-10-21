@@ -167,8 +167,6 @@ class DashboardTests(unittest.TestCase):
         app.clinical.replace_document(conn, 'mia', {
             'document': 'two.pdf', 'title': 'Two', 'medications': [{'name': 'Another hidden medication', 'page': 1}]
         })
-        app.preparation.save(conn, 'mia', 'source:one.pdf', {'included': True})
-        app.preparation.save(conn, 'mia', 'source:two.pdf', {'included': True})
         docs_dir = Path(self.temp.name) / 'mia'
         docs_dir.mkdir()
         (docs_dir / 'one.pdf').write_bytes(b'%PDF-1.4\nfirst')
@@ -179,6 +177,7 @@ class DashboardTests(unittest.TestCase):
             self.assertEqual(self.client.get('/api/clinical').json['medications'], [])
             self.assertEqual(self.client.get('/api/clinical').json['deleted_entries'], {})
             self.assertEqual([row['document'] for row in self.client.get('/api/clinical').json['documents']], ['one.pdf'])
+            self.assertIn('source:one.pdf', self.client.get('/').get_data(as_text=True))
             with self.client.get('/documents/one.pdf') as response:
                 self.assertEqual(response.status_code, 200)
             self.assertEqual(self.client.get('/documents/two.pdf').status_code, 404)

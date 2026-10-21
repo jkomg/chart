@@ -205,10 +205,7 @@ def provider_can_see_document(filename: str, user: str | None = None):
     if not is_provider():
         return True
     access = get_provider_access(session['user'])
-    if not access['sections'].get('documents', False) or filename not in access['documents']:
-        return False
-    prep = preparation.load(get_db(), data_user())
-    return bool(prep.get('source:' + filename, {}).get('included'))
+    return bool(access['sections'].get('documents', False) and filename in access['documents'])
 
 
 @app.before_request
