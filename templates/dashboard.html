@@ -5,29 +5,30 @@
   <title>Chart — private medical record</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
 </head>
-<body data-mode="provider" data-account="{{ current_user }}">
+<body data-mode="provider" data-account="{{ current_user }}" data-role="{{ 'provider' if provider_login else 'owner' }}">
   <div class="app-shell">
     <aside class="sidebar">
       <div class="brand"><div class="brand-mark small">✦</div><div><strong>chart</strong><span>{{ current_user|capitalize }}’s record</span></div></div>
-      <div class="people-pill"><span class="avatar">{{ current_user[:2]|upper }}</span><span><b>{{ current_user|capitalize }}</b><small>Private account</small></span><span class="chevron">⌄</span></div>
+      <div class="people-pill"><span class="avatar">{{ current_user[:2]|upper }}</span><span><b>{{ current_user|capitalize }}</b><small>{% if provider_login %}Provider presentation{% else %}Private account{% endif %}</small></span><span class="chevron">⌄</span></div>
       <div class="presentation-controls owner-only"><p class="nav-label">Prepare your visit</p><button type="button" class="primary-button mode-action" data-mode="provider">Present to provider <span aria-hidden="true">↗</span></button></div>
       <nav class="nav" aria-label="Primary">
         <p class="nav-label">Workspace</p>
-        <button class="nav-item active" data-tab="goals"><span class="nav-icon">◎</span>Issues{% if records.goals["issues"] %} <em>{{ records.goals["issues"]|length }}</em>{% endif %}</button>
-        <button class="nav-item" data-tab="history"><span class="nav-icon">◌</span>Medical history</button>
-        <button class="nav-item" data-tab="medications"><span class="nav-icon">＋</span>Medications</button>
-        <button class="nav-item" data-tab="labs"><span class="nav-icon">⌁</span>Labs</button>
-        <button class="nav-item" data-tab="vitals"><span class="nav-icon">♡</span>Vitals</button>
-        <button class="nav-item" data-tab="family"><span class="nav-icon">♧</span>Family history</button>
-        <button class="nav-item" data-tab="genetics"><span class="nav-icon">⧬</span>Genetics</button>
-        <button class="nav-item" data-tab="documents"><span class="nav-icon">▤</span>Medical records <em>{{ docs|length }}</em></button>
+        {% if visible_sections.goals %}<button class="nav-item active" data-tab="goals"><span class="nav-icon">◎</span>Issues{% if records.goals["issues"] %} <em>{{ records.goals["issues"]|length }}</em>{% endif %}</button>{% endif %}
+        {% if visible_sections.history %}<button class="nav-item" data-tab="history"><span class="nav-icon">◌</span>Medical history</button>{% endif %}
+        {% if visible_sections.medications %}<button class="nav-item" data-tab="medications"><span class="nav-icon">＋</span>Medications</button>{% endif %}
+        {% if visible_sections.labs %}<button class="nav-item" data-tab="labs"><span class="nav-icon">⌁</span>Labs</button>{% endif %}
+        {% if visible_sections.vitals %}<button class="nav-item" data-tab="vitals"><span class="nav-icon">♡</span>Vitals</button>{% endif %}
+        {% if visible_sections.family %}<button class="nav-item" data-tab="family"><span class="nav-icon">♧</span>Family history</button>{% endif %}
+        {% if visible_sections.genetics %}<button class="nav-item" data-tab="genetics"><span class="nav-icon">⧬</span>Genetics</button>{% endif %}
+        {% if visible_sections.documents %}<button class="nav-item" data-tab="documents"><span class="nav-icon">▤</span>Medical records <em>{{ docs|length }}</em></button>{% endif %}
+        {% if current_user == 'mia' and not provider_login %}<button class="nav-item owner-only" data-tab="provider-settings"><span class="nav-icon">⚙</span>Provider access</button>{% endif %}
       </nav>
       <div class="sidebar-bottom"><button type="button" class="exit-presentation mode-action" data-mode="owner" title="Return to Prepare to edit your chart">Exit presentation</button><div class="sync-status"><span></span><div><b>Private workspace</b><small>Encrypted in transit</small></div></div><form method="post" action="{{ url_for('logout') }}"><button class="logout-button">Sign out <span>↗</span></button></form></div>
     </aside>
     <main class="main-content">
-      <header class="topbar"><div class="breadcrumb" data-root="{{ current_user|upper }}">{{ current_user|upper }} <span>/</span> <b>ISSUES</b></div><div class="view-label owner-only">{{ current_user|capitalize }} · <span id="view-label">Provider view</span></div></header>
+      <header class="topbar"><div class="breadcrumb" data-root="{{ current_user|upper }}">{{ current_user|upper }} <span>/</span> <b>ISSUES</b></div><div class="view-label owner-only">{{ current_user|capitalize }} · <span id="view-label">Provider view</span></div>{% if provider_login %}<div class="view-label provider-only">{{ provider_display_name }} · Presentation mode</div>{% endif %}</header>
       <div class="content-wrap">
-        <section class="tab-panel active" id="goals">
+        <section class="tab-panel active" id="goals" {% if not visible_sections.goals %}hidden{% endif %}>
           <div class="page-heading"><div><h1>Issues</h1><p class="subtitle">Ongoing concerns and priorities for each appointment.</p></div></div>
           <section class="visit-priorities" aria-labelledby="active-visit-title">
             <div class="visit-agenda-heading"><div><p class="eyebrow">CURRENT APPOINTMENT</p><h2 id="active-visit-title">Visit priorities</h2></div><label class="visit-date-label">Visit date<input class="visit-date" type="date" aria-label="Visit date"></label><button type="button" class="outline-button compact close-visit owner-only">Close visit</button></div>
@@ -40,19 +41,20 @@
           <section class="ongoing-issues-area"><div class="section-row"><h2 class="section-title">Other issues</h2></div><div class="issues-list"></div></section>
           <script type="application/json" id="goals-data">{{ records.goals|tojson }}</script>
         </section>
-        <section class="tab-panel" id="history"><div class="page-heading"><div><h1>Medical history</h1><p class="subtitle">Conditions, allergies, procedures, and past visits.</p></div></div><div class="data-body" aria-live="polite"><p>Loading medical history…</p></div></section>
-        <section class="tab-panel" id="family"><div class="page-heading"><div><h1>Family history</h1><p class="subtitle">A separate profile for each relative, with their conditions kept together.</p></div></div><div class="data-body"><p>Loading family history…</p></div></section>
-        <section class="tab-panel" id="vitals">
+        <section class="tab-panel" id="history" {% if not visible_sections.history %}hidden{% endif %}><div class="page-heading"><div><h1>Medical history</h1><p class="subtitle">Conditions, allergies, procedures, and past visits.</p></div></div><div class="data-body" aria-live="polite"><p>Loading medical history…</p></div></section>
+        <section class="tab-panel" id="family" {% if not visible_sections.family %}hidden{% endif %}><div class="page-heading"><div><h1>Family history</h1><p class="subtitle">A separate profile for each relative, with their conditions kept together.</p></div></div><div class="data-body"><p>Loading family history…</p></div></section>
+        <section class="tab-panel" id="vitals" {% if not visible_sections.vitals %}hidden{% endif %}>
           <div class="page-heading"><div><p class="eyebrow">TRENDS OVER TIME</p><h1>Vitals</h1><p class="subtitle">Tap any point to see the exact reading and where it came from.</p></div></div>
           <div class="filter-row">
             <div class="segmented" role="group" aria-label="Time range" data-filter="range"><button type="button" data-value="1m">1M</button><button type="button" data-value="3m">3M</button><button type="button" data-value="6m">6M</button><button type="button" data-value="1y">1Y</button><button type="button" data-value="all">All</button></div>
           </div>
           <div class="vitals-body" aria-live="polite"></div>
         </section>
-        <section class="tab-panel" id="labs"><div class="page-heading"><div><h1>Labs</h1><p class="subtitle">Common labs first. Search all tests or expand a category.</p></div></div><div class="data-body" aria-live="polite"><p>Loading lab results…</p></div></section>
-        <section class="tab-panel" id="genetics"><div class="page-heading"><div><p class="eyebrow">INHERITED FACTORS</p><h1>Genetics</h1><p class="subtitle">Clinical genetic tests first, then consumer DNA data, each linked to its report.</p></div></div><div class="empty-card"><div class="empty-icon">⧬</div><h2>No genetic results yet.</h2><p>Clinical genetic reports and consumer DNA data appear here once imported.</p></div></section>
-        <section class="tab-panel" id="documents"><div class="page-heading"><div><p class="eyebrow">SOURCE OF TRUTH</p><h1>Medical records</h1><p class="subtitle">Your original PDFs, kept alongside the notes that explain them.</p></div><form class="owner-only" method="post" action="{{ url_for('upload_document') }}" enctype="multipart/form-data"><label class="outline-button file-button">↑ Upload PDF<input type="file" name="file" accept="application/pdf" onchange="this.form.submit()"></label></form></div><div class="upload-banner owner-only"><div class="upload-icon">↑</div><div><h3>Drop in a record when you’re ready</h3><p>Upload a PDF to this account’s private source records.</p></div><label class="primary-button compact file-button">Choose files<input type="file" name="file" accept="application/pdf" form="upload-form" onchange="document.getElementById('upload-form').submit()"></label></div><div class="document-grid">{% if docs %}{% for doc in docs %}<a class="document-card" href="#doc/{{ doc.filename|urlencode }}"><div class="pdf-icon">PDF</div><div><h3>{{ doc.name }}</h3><p>{{ doc.size }} KB · source document</p></div><span>→</span></a>{% endfor %}{% else %}<div class="empty-card"><div class="empty-icon">▤</div><h2>Your source records will live here.</h2><p>Add PDFs to the chart data volume and they’ll appear as private, clickable records.</p></div>{% endif %}</div><form id="upload-form" method="post" action="{{ url_for('upload_document') }}" enctype="multipart/form-data" hidden></form></section>
-        <section class="tab-panel" id="medications"><div class="page-heading"><div><h1>Medications</h1><p class="subtitle">Medications as documented, with dates and sources.</p></div></div><div class="data-body"><p>Loading medications…</p></div></section>
+        <section class="tab-panel" id="labs" {% if not visible_sections.labs %}hidden{% endif %}><div class="page-heading"><div><h1>Labs</h1><p class="subtitle">Common labs first. Search all tests or expand a category.</p></div></div><div class="data-body" aria-live="polite"><p>Loading lab results…</p></div></section>
+        <section class="tab-panel" id="genetics" {% if not visible_sections.genetics %}hidden{% endif %}><div class="page-heading"><div><p class="eyebrow">INHERITED FACTORS</p><h1>Genetics</h1><p class="subtitle">Clinical genetic tests first, then consumer DNA data, each linked to its report.</p></div></div><div class="empty-card"><div class="empty-icon">⧬</div><h2>No genetic results yet.</h2><p>Clinical genetic reports and consumer DNA data appear here once imported.</p></div></section>
+        <section class="tab-panel" id="documents" {% if not visible_sections.documents %}hidden{% endif %}><div class="page-heading"><div><p class="eyebrow">SOURCE OF TRUTH</p><h1>Medical records</h1><p class="subtitle">Your original PDFs, kept alongside the notes that explain them.</p></div><form class="owner-only" method="post" action="{{ url_for('upload_document') }}" enctype="multipart/form-data"><label class="outline-button file-button">↑ Upload PDF<input type="file" name="file" accept="application/pdf" onchange="this.form.submit()"></label></form></div><div class="upload-banner owner-only"><div class="upload-icon">↑</div><div><h3>Drop in a record when you’re ready</h3><p>Upload a PDF to this account’s private source records.</p></div><label class="primary-button compact file-button">Choose files<input type="file" name="file" accept="application/pdf" form="upload-form" onchange="document.getElementById('upload-form').submit()"></label></div><div class="document-grid">{% if docs %}{% for doc in docs %}<a class="document-card" href="#doc/{{ doc.filename|urlencode }}"><div class="pdf-icon">PDF</div><div><h3>{{ doc.name }}</h3><p>{{ doc.size }} KB · source document</p></div><span>→</span></a>{% endfor %}{% else %}<div class="empty-card"><div class="empty-icon">▤</div><h2>Your source records will live here.</h2><p>Add PDFs to the chart data volume and they’ll appear as private, clickable records.</p></div>{% endif %}</div><form id="upload-form" method="post" action="{{ url_for('upload_document') }}" enctype="multipart/form-data" hidden></form></section>
+        <section class="tab-panel" id="medications" {% if not visible_sections.medications %}hidden{% endif %}><div class="page-heading"><div><h1>Medications</h1><p class="subtitle">Medications as documented, with dates and sources.</p></div></div><div class="data-body"><p>Loading medications…</p></div></section>
+        {% if current_user == 'mia' and not provider_login %}<section class="tab-panel owner-only" id="provider-settings"><div class="page-heading"><div><p class="eyebrow">ACCESS CONTROL</p><h1>Provider access</h1><p class="subtitle">Choose which sections and individual medical record PDFs each provider can see in presentation mode.</p></div></div><div class="provider-settings-body" aria-live="polite"><p>Loading provider access…</p></div></section>{% endif %}
       </div>
     </main>
   </div>
@@ -75,6 +77,7 @@
   <script src="{{ url_for('static', filename='labs.js') }}"></script>
   <script src="{{ url_for('static', filename='records.js') }}"></script>
   <script src="{{ url_for('static', filename='goals.js') }}"></script>
+  {% if current_user == 'mia' and not provider_login %}<script src="{{ url_for('static', filename='provider-settings.js') }}"></script>{% endif %}
   <script type="module" src="{{ url_for('static', filename='viewer.js') }}"></script>
 </body>
 </html>

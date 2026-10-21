@@ -341,6 +341,18 @@ body[data-mode=owner] .exit-presentation{display:none}
 body[data-mode=provider] .people-pill,
 body[data-mode=provider] .sidebar-bottom .sync-status,
 body[data-mode=provider] .sidebar-bottom form{display:none}
+body[data-role=provider] .exit-presentation,
+body[data-role=provider] .presentation-controls{display:none!important}
+body[data-role=provider] .sidebar-bottom form{display:block!important}
+.provider-settings-body{display:grid;gap:18px}
+.provider-access-card{background:white;border:1px solid var(--line);border-radius:14px;padding:22px;display:grid;gap:20px}
+.provider-access-heading h2{margin:0 0 4px;font-size:22px}
+.provider-access-group{border:1px solid var(--line);border-radius:10px;padding:16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+.provider-access-group legend{font-weight:700;padding:0 6px}
+.provider-access-choice{display:flex;align-items:flex-start;gap:10px;padding:10px;border-radius:8px;background:#f6f8f7;line-height:1.4;cursor:pointer}
+.provider-access-choice input{width:18px;height:18px;flex:none;margin:1px 0 0;accent-color:var(--teal)}
+.provider-access-choice span{display:grid;gap:3px}.provider-access-choice small{font-size:12px;color:var(--muted)}
+.provider-access-actions{display:flex;align-items:center;gap:14px;flex-wrap:wrap}.provider-settings-status{font-size:13px;color:var(--muted);margin:0}
 @media(max-width:900px){
   .presentation-controls{margin:0 16px 12px;max-width:310px}
   .presentation-controls .nav-label{display:block}
