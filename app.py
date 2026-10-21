@@ -161,7 +161,8 @@ def require_login():
     return None
 
 
-VISIBLE_SECTIONS = ('goals', 'history', 'medications', 'labs', 'vitals', 'family', 'genetics', 'documents')
+VISIBLE_SECTIONS = ('goals', 'timeline', 'history', 'medications', 'labs', 'vitals', 'family', 'genetics', 'documents')
+TIMELINE_DOCUMENT = 'Oct_2026_Integrated_Medical_Timeline_UPDATED.pdf'
 
 
 def provider_account(username: str | None = None):
@@ -205,6 +206,8 @@ def provider_can_see_document(filename: str, user: str | None = None):
     if not is_provider():
         return True
     access = get_provider_access(session['user'])
+    if filename == TIMELINE_DOCUMENT:
+        return bool(access['sections'].get('timeline', False))
     return bool(access['sections'].get('documents', False) and filename in access['documents'])
 
 
@@ -324,10 +327,15 @@ def dashboard():
         for doc in docs:
             key = 'source:' + doc['filename']
             visible_prep[key] = {'included': True}
+        if access['sections'].get('timeline', False):
+            visible_prep['source:' + TIMELINE_DOCUMENT] = {'included': True}
         saved_preparation = visible_prep
+    else:
+        saved_preparation['source:' + TIMELINE_DOCUMENT] = {'included': True}
     return render_template("dashboard.html", records=records, docs=docs,
                            preparation=saved_preparation, visible_sections=access['sections'],
-                           provider_login=bool(account), provider_display_name=account[3] if account else '')
+                           provider_login=bool(account), provider_display_name=account[3] if account else '',
+                           timeline_document=TIMELINE_DOCUMENT)
 
 
 @app.get("/api/records")
@@ -716,13 +724,14 @@ def available_docs(user: str):
         if not LOCAL_DOCS_DIR:
             return []
         paths = sorted((Path(LOCAL_DOCS_DIR) / user).glob("*.pdf"), key=lambda p: p.stat().st_mtime, reverse=True)
-        return [{"name": p.stem.replace("_", " "), "filename": p.name, "size": round(p.stat().st_size / 1024), "updated": p.stat().st_mtime} for p in paths]
+        return [{"name": p.stem.replace("_", " "), "filename": p.name, "size": round(p.stat().st_size / 1024), "updated": p.stat().st_mtime}
+                for p in paths if p.name != TIMELINE_DOCUMENT]
     bucket = get_bucket()
     blobs = list(bucket.list_blobs(prefix=docs_prefix(user)))
     docs = []
     for blob in sorted(blobs, key=lambda b: b.updated, reverse=True):
         name = blob.name.removeprefix(docs_prefix(user))
-        if not name or "/" in name or not name.lower().endswith(".pdf"):
+        if not name or name == TIMELINE_DOCUMENT or "/" in name or not name.lower().endswith(".pdf"):
             continue
         docs.append({
             "name": name.rsplit(".", 1)[0].replace("_", " "),

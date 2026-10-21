@@ -29,9 +29,9 @@ function environment(data = {}) {
         return { ok: true, json: async () => payload };
       }
       if (url === '/api/provider-access') return { ok: true, json: async () => ({
-        providers: [{ username: 'amassmann', display_name: 'Dr. Massmann', sections: Object.fromEntries(['goals', 'history', 'medications', 'labs', 'vitals', 'family', 'genetics', 'documents'].map(key => [key, true])), documents: [] }],
+        providers: [{ username: 'amassmann', display_name: 'Dr. Massmann', sections: Object.fromEntries(['goals', 'timeline', 'history', 'medications', 'labs', 'vitals', 'family', 'genetics', 'documents'].map(key => [key, true])), documents: [] }],
         documents: [{ filename: 'report.pdf', name: 'Report', included_in_presentation: false }],
-        sections: ['goals', 'history', 'medications', 'labs', 'vitals', 'family', 'genetics', 'documents']
+        sections: ['goals', 'timeline', 'history', 'medications', 'labs', 'vitals', 'family', 'genetics', 'documents']
       }) };
       if (url.startsWith('/api/provider-access/') && options.method === 'PUT') {
         requests.push({ url, payload: JSON.parse(options.body) });
@@ -186,7 +186,7 @@ test('Provider access settings render section and per-document checkboxes and sa
   run('provider-settings'); await settled();
   const host = document.querySelector('.provider-settings-body');
   assert.ok(host.textContent.includes('Dr. Massmann'));
-  assert.equal(host.querySelectorAll('input[type="checkbox"]').length, 9);
+  assert.equal(host.querySelectorAll('input[type="checkbox"]').length, 10);
   const documentCheckbox = host.querySelector('[aria-label="Report"]');
   assert.ok(documentCheckbox);
   documentCheckbox.checked = true;

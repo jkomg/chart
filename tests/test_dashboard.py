@@ -171,6 +171,7 @@ class DashboardTests(unittest.TestCase):
         docs_dir.mkdir()
         (docs_dir / 'one.pdf').write_bytes(b'%PDF-1.4\nfirst')
         (docs_dir / 'two.pdf').write_bytes(b'%PDF-1.4\nsecond')
+        (docs_dir / app.TIMELINE_DOCUMENT).write_bytes(b'%PDF-1.4\ntimeline')
         with patch.object(app, 'GCS_BUCKET', ''), patch.object(app, 'LOCAL_DOCS_DIR', self.temp.name):
             with self.client.session_transaction() as session:
                 session.clear(); session.update(user='amassmann', role='provider', patient='mia')
@@ -178,6 +179,12 @@ class DashboardTests(unittest.TestCase):
             self.assertEqual(self.client.get('/api/clinical').json['deleted_entries'], {})
             self.assertEqual([row['document'] for row in self.client.get('/api/clinical').json['documents']], ['one.pdf'])
             self.assertIn('source:one.pdf', self.client.get('/').get_data(as_text=True))
+            page = self.client.get('/').get_data(as_text=True)
+            self.assertIn('data-tab="timeline"', page)
+            self.assertIn('Integrated medical timeline', page)
+            self.assertIn('source:' + app.TIMELINE_DOCUMENT, page)
+            self.assertNotIn(app.TIMELINE_DOCUMENT, [doc['filename'] for doc in app.available_docs('mia')])
+            self.assertEqual(self.client.get('/documents/' + app.TIMELINE_DOCUMENT).status_code, 200)
             with self.client.get('/documents/one.pdf') as response:
                 self.assertEqual(response.status_code, 200)
             self.assertEqual(self.client.get('/documents/two.pdf').status_code, 404)
@@ -189,6 +196,13 @@ class DashboardTests(unittest.TestCase):
             self.assertEqual({doc['filename'] for doc in settings['documents']}, {'one.pdf', 'two.pdf'})
             updated = self.client.put('/api/provider-access/amassmann', json={'sections': sections, 'documents': ['two.pdf']})
             self.assertEqual(updated.status_code, 200)
+            sections['timeline'] = False
+            conn.execute('UPDATE provider_access SET sections = ? WHERE username = ?', (json.dumps(sections), 'amassmann'))
+            conn.commit()
+            with self.client.session_transaction() as session:
+                session.clear(); session.update(user='amassmann', role='provider', patient='mia')
+            self.assertEqual(self.client.get('/documents/' + app.TIMELINE_DOCUMENT).status_code, 404)
+            self.assertNotIn('data-tab="timeline"', self.client.get('/').get_data(as_text=True))
 
     def test_family_member_details_are_validated_and_account_scoped(self):
         url = '/api/preparation/family-members'
