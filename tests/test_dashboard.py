@@ -185,7 +185,8 @@ class DashboardTests(unittest.TestCase):
             self.assertIn('Integrated medical timeline', page)
             self.assertIn('>Biometric Data</button>', page)
             self.assertLess(page.index('data-tab="history"'), page.index('data-tab="timeline"'))
-            self.assertGreater(page.index('data-tab="medications"'), page.index('data-tab="documents"'))
+            template = Path(app.app.template_folder, 'dashboard.html').read_text()
+            self.assertGreater(template.index('data-tab="medications"'), template.index('data-tab="documents"'))
             self.assertIn('source:' + app.TIMELINE_DOCUMENT, page)
             self.assertNotIn(app.TIMELINE_DOCUMENT, [doc['filename'] for doc in app.available_docs('mia')])
             self.assertEqual(self.client.get('/documents/' + app.TIMELINE_DOCUMENT).status_code, 200)
@@ -288,6 +289,10 @@ class DashboardTests(unittest.TestCase):
             self.assertEqual(updated['series']['resting_hr'][0]['_original']['value'], 60)
             self.assertEqual(self.client.put('/api/preparation/entries/cycles/' + cycle['_key'],
                 json={'fields': {'start': 'not-a-date'}, 'notes': ''}).status_code, 400)
+
+    def test_heart_rate_is_separate_from_resting_heart_rate(self):
+        self.assertEqual(app.vitals.METRICS['heart_rate']['label'], 'Heart rate')
+        self.assertEqual(app.vitals.METRICS['resting_hr']['label'], 'Resting heart rate')
 
     def test_manual_medication_and_lab_note_validation(self):
         response = self.client.post('/api/preparation/entries/medications', json={'fields': {'name': 'Sample medication', 'dose': 'Sample dose'}, 'notes': 'Patient note'})

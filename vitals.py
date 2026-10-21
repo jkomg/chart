@@ -11,6 +11,7 @@ METRICS = {
     "height": {"label": "Height", "unit": "in", "decimals": 1, "range": None},
     "bmi": {"label": "BMI", "unit": "kg/m²", "decimals": 1, "range": [18.5, 25]},
     "resting_hr": {"label": "Resting heart rate", "unit": "bpm", "decimals": 0, "range": [60, 100]},
+    "heart_rate": {"label": "Heart rate", "unit": "bpm", "decimals": 0, "range": [40, 200]},
     "hrv_sdnn": {"label": "Heart rate variability (SDNN)", "unit": "ms", "decimals": 0, "range": None},
     "hrv_rmssd": {"label": "Heart rate variability (RMSSD)", "unit": "ms", "decimals": 0, "range": None},
     "bp_systolic": {"label": "Systolic", "unit": "mmHg", "decimals": 0, "range": [90, 120]},
