@@ -183,6 +183,12 @@ class DashboardTests(unittest.TestCase):
             page = self.client.get('/').get_data(as_text=True)
             self.assertIn('data-tab="timeline"', page)
             self.assertIn('Integrated medical timeline', page)
+            self.assertIn('WORKING UPDATED DRAFT · 7 PAGES', page)
+            for heading in ('Parallel chronological tracks', 'Active clinical questions and priorities',
+                            'Objective laboratory trends', 'Abdominal fat distribution versus digestive symptoms',
+                            'Metabolic genetic context (patient-provided report)', 'Family history, organized by lineage',
+                            'Preventive care and unresolved source gaps'):
+                self.assertIn(heading, page)
             self.assertIn('>Biometric Data</button>', page)
             self.assertLess(page.index('data-tab="history"'), page.index('data-tab="timeline"'))
             template = Path(app.app.template_folder, 'dashboard.html').read_text()
