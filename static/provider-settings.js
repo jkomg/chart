@@ -18,13 +18,13 @@
     host.replaceChildren();
     if (!data.providers.length) { host.append(el('p', {}, 'No provider accounts are configured yet.')); return; }
     for (const provider of data.providers) {
-      const sectionInputs = new Map();
       const documentInputs = new Map();
+      const sectionInputs = {};
       const status = el('p', { class: 'provider-settings-status', role: 'status' });
       const sectionGroup = el('fieldset', { class: 'provider-access-group' }, el('legend', {}, 'Sections available in presentation mode'));
       for (const section of data.sections) {
-        const input = el('input', { type: 'checkbox', checked: provider.sections[section], 'aria-label': labels[section] });
-        sectionInputs.set(section, input);
+        const input = el('input', { type: 'checkbox', checked: provider.sections[section], 'aria-label': labels[section], 'data-provider-section': section });
+        sectionInputs[section] = input;
         sectionGroup.append(el('label', { class: 'provider-access-choice' }, input, el('span', {}, labels[section])));
       }
       const documentGroup = el('fieldset', { class: 'provider-access-group' }, el('legend', {}, 'Individual medical records'));
@@ -43,7 +43,10 @@
           const result = await fetch(`/api/provider-access/${encodeURIComponent(provider.username)}`, {
             method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              sections: Object.fromEntries([...sectionInputs].map(([key, input]) => [key, input.checked])),
+              sections: Object.keys(sectionInputs).reduce((result, key) => {
+                result[key] = sectionInputs[key].checked;
+                return result;
+              }, {}),
               documents: [...documentInputs].filter(([, input]) => input.checked).map(([filename]) => filename)
             })
           });
@@ -53,9 +56,11 @@
         } catch (error) { status.textContent = error.message; }
         finally { save.disabled = false; }
       });
-      host.append(el('article', { class: 'provider-access-card' },
-        el('div', { class: 'provider-access-heading' }, el('div', {}, el('h2', {}, provider.display_name), el('p', { class: 'vital-meta' }, `Login: ${provider.username} · read-only presentation access to Mia’s chart`)),
-          sectionGroup, documentGroup, el('div', { class: 'provider-access-actions' }, save, status)));
+      const heading = el('div', { class: 'provider-access-heading' },
+        el('div', {}, el('h2', {}, provider.display_name),
+          el('p', { class: 'vital-meta' }, `Login: ${provider.username} · read-only presentation access to Mia’s chart`)));
+      host.append(el('article', { class: 'provider-access-card' }, heading, sectionGroup, documentGroup,
+        el('div', { class: 'provider-access-actions' }, save, status)));
     }
   }
   load().catch(error => { host.replaceChildren(el('p', { role: 'alert' }, error.message)); });
