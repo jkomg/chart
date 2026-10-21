@@ -161,6 +161,26 @@ test('Standalone genetic reports appear in Genetics without being presented as c
   assert.equal(genetics.querySelector('button')?.textContent, 'Open report →');
 });
 
+test('Medical records are grouped by expanded, collapsible year headings', async () => {
+  const { chart, document, run, window } = environment({ documents: [
+    { document: 'recent.pdf', title: 'Recent record', date: '2025-04-01' },
+    { document: 'older.pdf', title: 'Older record', date: '2024-03-01' }
+  ] });
+  chart.renderHistory = () => {};
+  run('records'); await settled();
+  const groups = [...document.querySelectorAll('#documents .record-year')];
+  assert.equal(groups.length, 2);
+  assert.deepEqual(groups.map(group => group.querySelector('summary').textContent), ['2025', '2024']);
+  assert.equal(groups.every(group => group.open), true);
+  groups[0].open = false;
+  assert.equal(groups[0].open, false);
+  const search = document.querySelector('#documents .search-input');
+  search.value = 'Older record';
+  search.dispatchEvent(new window.Event('input'));
+  assert.equal(groups[1].open, true);
+  assert.equal(groups[0].open, false);
+});
+
 test('Provider access settings render section and per-document checkboxes and save selections', async () => {
   const { document, run, requests } = environment();
   run('provider-settings'); await settled();

@@ -113,10 +113,18 @@
     const uploaded = uploadedDocuments;
     const known = new Set(data.documents.map(d => d.document));
     const list = el('div', { class: 'record-list' });
-    let year = null;
+    let year = null, yearContent = null;
     for (const d of data.documents) {
       const y = d.unextracted ? 'Uploaded, not yet extracted' : (d.date || '').slice(0, 4) || 'Undated';
-      if (y !== year) { year = y; list.append(el('p', { class: 'eyebrow timeline-year' }, y || 'Undated')); }
+      if (y !== year) {
+        year = y;
+        const group = el('details', { class: 'record-year' });
+        group.open = true;
+        group.append(el('summary', { class: 'timeline-year' }, y || 'Undated'));
+        yearContent = el('div', { class: 'record-year-content' });
+        group.append(yearContent);
+        list.append(group);
+      }
       const row = el('a', { class: 'record-row', href: `#doc/${encodeURIComponent(d.document)}` },
         el('div', { class: 'pdf-icon' }, 'PDF'),
         el('div', { class: 'record-copy' },
@@ -142,22 +150,30 @@
       });
       entry.append(el('label', { class: 'source-inclusion owner-only' }, include, el('span', {}, 'Include source in Provider view')),
         flagError);
-      list.append(entry);
+      yearContent.append(entry);
     }
     const deletedDocuments = new Set((data.deleted_entries?.documents || []).map(d => d.document));
     const extra = uploaded.filter(n => !known.has(n) && !deletedDocuments.has(n));
     if (extra.length) {
-      list.append(el('p', { class: 'eyebrow timeline-year' }, 'Uploaded, not yet extracted'));
+      const group = el('details', { class: 'record-year' });
+      group.open = true;
+      group.append(el('summary', { class: 'timeline-year' }, 'Uploaded, not yet extracted'));
+      const content = el('div', { class: 'record-year-content' });
+      group.append(content);
       extra.forEach(n => {
         const entry = el('a', { class: 'record-row', href: `#doc/${encodeURIComponent(n)}`, 'data-provider-document': n });
         entry.append(el('div', { class: 'pdf-icon' }, 'PDF'), el('div', { class: 'record-copy' }, el('b', {}, n)), el('span', { class: 'record-arrow' }, '→'));
-        list.append(entry);
+        content.append(entry);
       });
+      list.append(group);
     }
     const search = el('input', { type: 'search', class: 'search-input', placeholder: 'Search documents', 'aria-label': 'Search documents' });
     search.addEventListener('input', () => {
       const q = search.value.trim().toLowerCase();
       list.querySelectorAll('.record-row').forEach(r => { r.hidden = q && !r.textContent.toLowerCase().includes(q); });
+      if (q) list.querySelectorAll('.record-year').forEach(group => {
+        group.open = [...group.querySelectorAll('.record-row')].some(row => !row.hidden);
+      });
     });
     const upload = section.querySelector('.upload-banner');
     body('documents', el('div', { class: 'filter-row plain' }, search),
