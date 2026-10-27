@@ -32,23 +32,23 @@
       <form method="post" action="{{ url_for('logout') }}"><button class="logout-button" type="submit">Sign out <span>↗</span></button></form>
     </header>
     <main class="admin-main">
-      <div class="page-heading"><div><p class="eyebrow">ADMINISTRATOR · {{ admin_name }}</p><h1>Usage and activity</h1><p class="subtitle">Provider sign-ins and application errors from the last 30 days.</p></div></div>
+      <div class="page-heading"><div><p class="eyebrow">ADMINISTRATOR · {{ admin_name }}</p><h1>Usage and activity</h1><p class="subtitle">Sign-ins, visits, and application errors. Totals cover the last 30 days.</p></div></div>
       <section class="admin-metrics" aria-label="Last 30 days">
-        <article class="admin-stat"><span>Successful provider sign-ins</span><strong>{{ metrics[0] }}</strong></article>
+        <article class="admin-stat"><span>Provider sign-ins and visits</span><strong>{{ metrics[0] }}</strong></article>
         <article class="admin-stat"><span>Failed sign-in attempts</span><strong>{{ metrics[1] }}</strong></article>
         <article class="admin-stat"><span>Application errors</span><strong>{{ metrics[2] }}</strong></article>
       </section>
       <section class="admin-panel">
         <h2>Provider accounts</h2>
-        {% if providers %}<table class="admin-table"><thead><tr><th>Account</th><th>Name</th><th>Successful sign-ins · 30 days</th><th>Last successful sign-in</th></tr></thead><tbody>
-        {% for username, display_name, login_count, last_login in providers %}<tr><td>{{ username }}</td><td>{{ display_name }}</td><td>{{ login_count or 0 }}</td><td>{{ last_login or 'No successful sign-in recorded' }}</td></tr>{% endfor %}
+        {% if providers %}<table class="admin-table"><thead><tr><th>Account</th><th>Name</th><th>Sign-ins · 30 days</th><th>Visits · 30 days</th><th>Last activity</th></tr></thead><tbody>
+        {% for username, display_name, login_count, visit_count, last_seen in providers %}<tr><td>{{ username }}</td><td>{{ display_name }}</td><td>{{ login_count or 0 }}</td><td>{{ visit_count or 0 }}</td><td>{{ last_seen or 'No activity recorded' }}</td></tr>{% endfor %}
         </tbody></table>{% else %}<p class="admin-empty">No provider accounts have been created.</p>{% endif %}
       </section>
       <section class="admin-panel">
-        <h2>Recent sign-ins</h2>
-        {% if activity %}<table class="admin-table"><thead><tr><th>Time (UTC)</th><th>Username</th><th>Role</th><th>Result</th></tr></thead><tbody>
-        {% for created_at, username, role, outcome in activity %}<tr><td>{{ created_at }}</td><td>{{ username }}</td><td>{{ role|capitalize }}</td><td>{{ outcome|capitalize }}</td></tr>{% endfor %}
-        </tbody></table>{% else %}<p class="admin-empty">No sign-in activity has been recorded yet.</p>{% endif %}
+        <h2>Recent account activity</h2>
+        {% if activity %}<table class="admin-table"><thead><tr><th>Time (UTC)</th><th>Username</th><th>Role</th><th>Event</th><th>Result</th></tr></thead><tbody>
+        {% for created_at, username, role, event_type, outcome in activity %}<tr><td>{{ created_at }}</td><td>{{ username }}</td><td>{{ role|capitalize }}</td><td>{{ 'Sign-in' if event_type == 'login' else 'Visit (saved sign-in)' }}</td><td>{{ outcome|capitalize }}</td></tr>{% endfor %}
+        </tbody></table>{% else %}<p class="admin-empty">No account activity has been recorded yet.</p>{% endif %}
       </section>
       <section class="admin-panel">
         <h2>Recent application errors</h2>
@@ -56,7 +56,7 @@
         {% for created_at, endpoint, detail in errors %}<tr><td>{{ created_at }}</td><td>{{ endpoint }}</td><td>{{ detail }}</td></tr>{% endfor %}
         </tbody></table>{% else %}<p class="admin-empty">No application errors have been recorded.</p>{% endif %}
       </section>
-      <p class="admin-note">Activity records contain account names, timestamps, route names, and error types. Passwords and patient record contents are not included.</p>
+      <p class="admin-note">A visit is logged the first time each day that a browser opens chart while already signed in. Activity records contain account names, timestamps, route names, and error types. Passwords and patient record contents are not included.</p>
     </main>
   </div>
 </body>

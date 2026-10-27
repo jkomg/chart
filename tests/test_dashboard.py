@@ -176,11 +176,42 @@ class DashboardTests(unittest.TestCase):
         })
         self.assertEqual(changed.headers['Location'], '/admin')
         page = self.client.get('/admin').get_data(as_text=True)
-        self.assertIn('Successful provider sign-ins', page)
+        self.assertIn('Provider sign-ins and visits', page)
         self.assertIn('Failed sign-in attempts', page)
         self.assertIn('Dr. Massmann', page)
         events = conn.execute("SELECT actor_role, outcome FROM audit_events WHERE username='amassmann' ORDER BY id").fetchall()
         self.assertEqual(events, [('provider', 'success'), ('provider', 'failure')])
+
+    def test_saved_sessions_and_unknown_failures_appear_in_admin_activity(self):
+        conn = app.get_db()
+        conn.execute('INSERT INTO provider_accounts (username, password_hash, patient, display_name, must_change_password) VALUES (?, ?, ?, ?, ?)',
+                     ('amassmann', app.hash_password('Provider-Temp-123!'), 'mia', 'Dr. Massmann', 0))
+        conn.execute('INSERT INTO admin_accounts (username, password_hash, display_name, must_change_password) VALUES (?, ?, ?, ?)',
+                     ('admin', app.hash_password('Admin-Temp-123!'), 'System admin', 0))
+        conn.commit()
+
+        # setUp left a saved owner session that never went through /login.
+        self.assertEqual(self.client.get('/').status_code, 200)
+        self.client.get('/')
+        with self.client.session_transaction() as session:
+            session.clear()
+            session.update(user='amassmann', role='provider', patient='mia')
+        self.assertEqual(self.client.get('/').status_code, 200)
+        self.client.post('/logout')
+        self.client.post('/login', data={'username': 'nobody', 'password': 'wrong'})
+
+        events = conn.execute("SELECT username, actor_role, event_type, outcome FROM audit_events ORDER BY id").fetchall()
+        self.assertEqual(events, [('sample-a', 'owner', 'visit', 'success'), ('amassmann', 'provider', 'visit', 'success'),
+                                  ('nobody', 'unknown', 'login', 'failure')])
+
+        self.client.post('/login', data={'username': 'admin', 'password': 'Admin-Temp-123!'})
+        page = self.client.get('/admin').get_data(as_text=True)
+        self.assertIn('sample-a', page)
+        self.assertIn('nobody', page)
+        self.assertIn('Visit (saved sign-in)', page)
+        provider_row = page[page.index('<td>amassmann</td>'):]
+        self.assertIn('<td>0</td><td>1</td>', provider_row[:200])
+        self.assertEqual(conn.execute("SELECT COUNT(*) FROM audit_events WHERE username='admin'").fetchone()[0], 1)
 
     def test_unhandled_application_errors_are_recorded_without_error_messages(self):
         with app.app.test_request_context('/__test-error'):

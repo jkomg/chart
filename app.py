@@ -5,7 +5,7 @@ import json
 import mimetypes
 import os
 import secrets
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 import libsql
@@ -302,6 +302,22 @@ def enforce_admin_access():
     return redirect(url_for('admin_dashboard'))
 
 
+def utc_today() -> str:
+    return datetime.now(timezone.utc).date().isoformat()
+
+
+@app.before_request
+def record_signed_in_visit():
+    """Saved sign-ins never pass through /login, so log the first page load per browser each day."""
+    if not session.get('user') or request.endpoint not in {'dashboard', 'admin_dashboard'}:
+        return None
+    today = utc_today()
+    if session.get('visit_day') != today:
+        record_audit_event(session['user'], session.get('role', 'owner'), 'visit', 'success', request.endpoint)
+        session['visit_day'] = today
+    return None
+
+
 @app.errorhandler(Exception)
 def log_unhandled_error(error):
     if isinstance(error, HTTPException):
@@ -338,7 +354,7 @@ def login_post():
     if account and check_password(password, account[1]):
         record_audit_event(username, 'provider', 'login', 'success', 'login_post')
         session.clear()
-        session.update(user=username, role='provider', patient=account[2])
+        session.update(user=username, role='provider', patient=account[2], visit_day=utc_today())
         if account[4]:
             return redirect(url_for('change_password'))
         return redirect(url_for('dashboard'))
@@ -346,7 +362,7 @@ def login_post():
     if admin and check_password(password, admin[1]):
         record_audit_event(username, 'admin', 'login', 'success', 'login_post')
         session.clear()
-        session.update(user=username, role='admin')
+        session.update(user=username, role='admin', visit_day=utc_today())
         if admin[3]:
             return redirect(url_for('change_password'))
         return redirect(url_for('admin_dashboard'))
@@ -354,7 +370,7 @@ def login_post():
     if stored_hash and check_password(password, stored_hash):
         record_audit_event(username, 'owner', 'login', 'success', 'login_post')
         session.clear()
-        session["user"] = username
+        session.update(user=username, visit_day=utc_today())
         next_path = request.args.get("next", "")
         if not next_path.startswith("/") or next_path.startswith("//"):
             next_path = url_for("dashboard")
@@ -413,7 +429,7 @@ def admin_dashboard():
     conn = get_db()
     metrics = conn.execute("""
         SELECT
-          SUM(CASE WHEN event_type = 'login' AND actor_role = 'provider' AND outcome = 'success' THEN 1 ELSE 0 END),
+          SUM(CASE WHEN event_type IN ('login', 'visit') AND actor_role = 'provider' AND outcome = 'success' THEN 1 ELSE 0 END),
           SUM(CASE WHEN event_type = 'login' AND outcome = 'failure' THEN 1 ELSE 0 END),
           SUM(CASE WHEN event_type = 'server_error' THEN 1 ELSE 0 END)
         FROM audit_events WHERE created_at >= datetime('now', '-30 days')
@@ -422,14 +438,15 @@ def admin_dashboard():
         SELECT p.username, p.display_name,
           SUM(CASE WHEN e.event_type = 'login' AND e.outcome = 'success'
                    AND e.created_at >= datetime('now', '-30 days') THEN 1 ELSE 0 END),
-          MAX(CASE WHEN e.event_type = 'login' AND e.outcome = 'success' THEN e.created_at END)
+          SUM(CASE WHEN e.event_type = 'visit' AND e.created_at >= datetime('now', '-30 days') THEN 1 ELSE 0 END),
+          MAX(CASE WHEN e.event_type IN ('login', 'visit') AND e.outcome = 'success' THEN e.created_at END)
         FROM provider_accounts p LEFT JOIN audit_events e ON e.username = p.username AND e.actor_role = 'provider'
         GROUP BY p.username, p.display_name ORDER BY p.display_name
     """).fetchall()
     activity = conn.execute("""
-        SELECT created_at, username, actor_role, outcome FROM audit_events
-        WHERE event_type = 'login' AND actor_role IN ('provider', 'owner', 'admin')
-        ORDER BY id DESC LIMIT 100
+        SELECT created_at, username, actor_role, event_type, outcome FROM audit_events
+        WHERE event_type IN ('login', 'visit')
+        ORDER BY id DESC LIMIT 200
     """).fetchall()
     errors = conn.execute("""
         SELECT created_at, endpoint, detail FROM audit_events
